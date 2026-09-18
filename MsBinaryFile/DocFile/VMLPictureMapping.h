@@ -72,7 +72,7 @@ namespace DocFileFormat
 
 		static std::wstring GetTargetExt (Global::BlipType nType);
 		static std::wstring GetContentType (Global::BlipType nType);
-
+		
 		bool m_isBlob = false;
 		bool m_isBullete = false;
 		bool m_isEquation = false;

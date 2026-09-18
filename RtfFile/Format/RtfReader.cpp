@@ -168,7 +168,7 @@ bool RtfAbstractReader::ExecuteCommand( RtfDocument& oDocument, RtfReader& oRead
 {
 	return true;
 }
-void RtfAbstractReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText )
+void RtfAbstractReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText )
 {
 }
 void RtfAbstractReader::ExitReader( RtfDocument& oDocument, RtfReader& oReader )
@@ -208,7 +208,8 @@ bool RtfAbstractReader::RtfAbstractReader::Parse(RtfDocument& oDocument, RtfRead
 			ExecuteTextInternal2(oDocument, oReader, m_oTok.Key, m_nSkipChars);
 			if (m_oTok.Key == "u")
 			{
-				ExecuteText(oDocument, oReader, ExecuteTextInternal(oDocument, oReader, m_oTok.Key, m_oTok.HasParameter, m_oTok.Parameter, m_nSkipChars));
+				std::wstring strText = ExecuteTextInternal(oDocument, oReader, m_oTok.Key, m_oTok.HasParameter, m_oTok.Parameter, m_nSkipChars);
+				ExecuteText(oDocument, oReader, strText);
 				break;
 			}
 			else
@@ -247,7 +248,10 @@ bool RtfAbstractReader::RtfAbstractReader::Parse(RtfDocument& oDocument, RtfRead
 		}break;
 		case RtfToken::Text:
 		{
-			oReader.m_oState->m_sCurText += m_oTok.Key;
+			if (oReader.m_oState->m_sCurText.empty())
+				oReader.m_oState->m_sCurText = std::move(m_oTok.Key);
+			else
+				oReader.m_oState->m_sCurText += std::move(m_oTok.Key);
 		}break;
 
 		}
@@ -285,7 +289,7 @@ std::wstring RtfAbstractReader::ExecuteTextInternal(RtfDocument& oDocument, RtfR
 		else
 			sCharString = sKey;
 
-		sResult = ExecuteTextInternalCodePage(sCharString, oDocument, oReader);
+		ExecuteTextInternalCodePage(sCharString, oDocument, oReader, sResult);
 	}
 	ExecuteTextInternalSkipChars(sResult, oReader, sKey, nSkipChars);
 	return sResult;
@@ -297,9 +301,11 @@ void RtfAbstractReader::ExecuteTextInternal2(RtfDocument& oDocument, RtfReader& 
 		std::string str;
 		ExecuteTextInternalSkipChars(oReader.m_oState->m_sCurText, oReader, str, nSkipChars);
 		
-		std::wstring sResult = ExecuteTextInternalCodePage(oReader.m_oState->m_sCurText, oDocument, oReader);
+		std::wstring sResult;
+		ExecuteTextInternalCodePage(oReader.m_oState->m_sCurText, oDocument, oReader, sResult);
 		
 		oReader.m_oState->m_sCurText.erase();
+		oReader.m_oState->m_sCurText.shrink_to_fit();
 		oReader.m_oState->m_bControlPresent = false;
 		
 		if (false == sResult.empty())
@@ -320,7 +326,7 @@ void RtfAbstractReader::ExecuteTextInternalSkipChars(std::string & sResult, RtfR
 		}
 		else
 		{
-			sResult = sResult.substr(nSkipChars);
+			sResult = std::move(sResult.substr(nSkipChars));
 		}
 		nSkipChars = 0;
 	}
@@ -352,12 +358,16 @@ void RtfAbstractReader::ExecuteTextInternalSkipChars(std::wstring & sResult, Rtf
 		nSkipChars = oReader.m_oState->m_nUnicodeClean;
 	}
 }
-std::wstring RtfAbstractReader::ExecuteTextInternalCodePage( std::string& sCharString, RtfDocument& oDocument, RtfReader& oReader)
+
+
+void RtfAbstractReader::ExecuteTextInternalCodePage( std::string& sCharString, RtfDocument& oDocument, RtfReader& oReader, std::wstring& sResult)
 {
-	if (sCharString.empty()) return L"";
-	if (sCharString == "*") return L"*";
-	
-	std::wstring sResult;
+	if (sCharString.empty()) return;
+	if (sCharString == "*")
+	{
+		sResult = L"*";
+		return;
+	} 
 
 	int nCodepage = -1;
 
@@ -415,13 +425,27 @@ std::wstring RtfAbstractReader::ExecuteTextInternalCodePage( std::string& sCharS
 	}
 	else
 	{
-		sResult = RtfUtility::convert_string_icu(sCharString.begin(), sCharString.end(), nCodepage);
-	}
+		const size_t MAX_CONVERT_CHUNK_SIZE = 1024 * 1024; //1MB
+		if (sCharString.size() <= MAX_CONVERT_CHUNK_SIZE)
+			sResult = RtfUtility::convert_string_icu(sCharString.begin(), sCharString.end(), nCodepage);
+		else
+		{
+			size_t processed = 0;
+			while (processed < sCharString.size()) {
+				size_t chunkSize = std::min(MAX_CONVERT_CHUNK_SIZE, sCharString.size() - processed);
+				
+				auto chunkBegin = sCharString.begin() + processed;
+				auto chunkEnd = sCharString.begin() + processed + chunkSize;
+				
+				std::wstring chunkResult = RtfUtility::convert_string_icu(chunkBegin, chunkEnd, nCodepage);
+				chunkResult.shrink_to_fit();
 
-	//if (!sCharString.empty() && sResult.empty())
-	//{
-	//	//code page not support in icu !!!
-	//	sResult = RtfUtility::convert_string(sCharString.begin(), sCharString.end(), nCodepage); .. to UnicodeConverter
-	//}
-    return sResult;
+				if (sResult.empty())
+					sResult = std::move(chunkResult);
+				else
+					sResult += std::move(chunkResult);
+				processed += chunkSize;
+			}
+		}
+	}
 }

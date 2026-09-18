@@ -179,6 +179,20 @@ namespace DocFileFormat
 
 		return sz;
 	}
+	void CMetaFileBuffer::ToFile(std::wstring& fileName)
+	{
+		NSFile::CFileBinary file;
+		if (file.CreateFileW(fileName))
+		{
+			if (NULL != m_pMetaHeader)
+				file.WriteFile( (BYTE*)m_pMetaHeader, m_lMetaHeaderSize);
+			if (NULL != m_pMetaFile)
+				file.WriteFile( (BYTE*)m_pMetaFile, m_lMetaFileSize);
+
+			file.CloseFile();
+		}
+	}
+
 	void CMetaFileBuffer::ToFile(NSFile::CFileBinary* pFile)
 	{
 		if (NULL != m_pMetaHeader)

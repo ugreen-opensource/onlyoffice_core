@@ -192,6 +192,6 @@ namespace DocFileFormat
 		m_pXmlWriter->WriteNodeEnd( L"w:body" );
 		m_pXmlWriter->WriteNodeEnd( L"w:document" );
 
-		m_context->_docx->DocumentXML = std::wstring(m_pXmlWriter->GetXmlString());
+		m_context->_docx->DocumentXML = m_pXmlWriter->TakeXmlString();
 	}
 }

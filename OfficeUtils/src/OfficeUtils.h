@@ -76,6 +76,8 @@ public:
 
 	static int GetAddonFlag();
 	static void SetAddonFlag(int flag);
+
+	HRESULT IsZipSignature(const std::wstring& filename);
 };
 
 #define DEFLATE_NO_FLUSH      0

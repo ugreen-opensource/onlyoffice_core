@@ -98,6 +98,7 @@ public:
 
 	int ToBuffer(BYTE *& Data);
 	void ToFile(NSFile::CFileBinary* pFile);
+	void ToFile(std::wstring& fileName);
 	bool isWMV();
 };
 

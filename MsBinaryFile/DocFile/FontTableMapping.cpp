@@ -140,6 +140,6 @@ namespace DocFileFormat
 
         m_pXmlWriter->WriteNodeEnd( L"w:fonts");
 
-		_ctx->_docx->FontTableXML = m_pXmlWriter->GetXmlString() ;
+		_ctx->_docx->FontTableXML = m_pXmlWriter->TakeXmlString() ;
 	}
 }

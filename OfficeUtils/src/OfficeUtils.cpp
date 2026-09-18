@@ -274,6 +274,34 @@ HRESULT COfficeUtils::GetFilesSize(const std::wstring& _zipFile, const std::wstr
 	}
 }
 
+HRESULT COfficeUtils::IsZipSignature(const std::wstring& filename)
+{
+	NSFile::CFileBinary file;
+	if (!file.OpenFile(filename))
+		return S_FALSE;
+
+	BYTE header[4] = {0};
+	DWORD read_bytes = 0;
+	file.ReadFile(header, 4, read_bytes);
+	file.CloseFile();
+
+	if (read_bytes != 4 || header[0] != 0x50 || header[1] != 0x4B)
+		return S_FALSE;
+
+	unsigned short signature_type = (unsigned short)((header[3] << 8) | header[2]);
+	switch (signature_type)
+	{
+	case 0x0403: // Local file header
+	case 0x0504: // Central directory file header
+	case 0x0605: // End of central directory record
+	case 0x0708: // Split archive
+	case 0x0809: // Spanned archive
+		return S_OK;
+	default:
+		return S_FALSE;
+	}
+}
+
 int COfficeUtils::GetAddonFlag()
 {
 	return zlip_get_addition_flag();

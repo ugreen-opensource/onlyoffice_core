@@ -318,30 +318,35 @@ void RtfUtility::WriteDataToFileBinary(std::wstring& sFilename, BYTE* pbData, si
 	file.WriteFile(pbData, (DWORD)nLength);
 	file.CloseFile();
 }
+
 void RtfUtility::WriteDataToFile(std::wstring& sFilename, std::wstring& sData)
 {
 	NSFile::CFileBinary file;
-
 	if (false == file.CreateFileW(sFilename)) return;
 
 	wchar_t * buf  = (wchar_t *)sData.c_str();
-	size_t nLengthText	= sData.length();
-	size_t nLengthData	= nLengthText/2;
+	size_t nLengthData	= sData.length()/2;
+	size_t remaining = nLengthData;
 
-	BYTE * buf2 = new BYTE[ nLengthData];
-	BYTE nByte=0;
-
-	for (size_t i = 0; i < nLengthData ; i++ )
-	{
-		nByte = ToByte( buf[2 * i] ) << 4;
-		nByte |= ToByte( buf[2 * i + 1] );
-		buf2[i] = nByte;
+	const size_t sBuffSize = std::min(nLengthData, static_cast<size_t>(64*1024)); //4M
+	std::vector<BYTE> buffer(sBuffSize);
+	
+	size_t currentPos = 0;
+	while (remaining > 0) {
+		size_t blockSize = (remaining > sBuffSize) ? sBuffSize : remaining;
+		for (size_t i = 0; i < blockSize; i++) {
+			const size_t charIndex = 2 * (currentPos + i);
+			BYTE nByte = (ToByte(buf[charIndex]) << 4 | ToByte(buf[charIndex + 1]));
+			buffer[i] = nByte;
+		}
+		
+		file.WriteFile(buffer.data(), (DWORD)blockSize);
+		currentPos += blockSize;
+		remaining -= blockSize;
 	}
-	file.WriteFile(buf2 ,(DWORD)nLengthData);
-	delete[] buf2;
 	file.CloseFile();
-
 }
+
 void RtfUtility::DecodeHexString( std::string sHexText, BYTE *&pData )
 {
 	if (sHexText.empty()) return;

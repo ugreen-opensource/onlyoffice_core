@@ -1295,6 +1295,15 @@ namespace NExtractTools
 			NSFile::CFileBinary file;
 			return file.OpenFile(*m_sFileFrom) && 0 == file.GetFileSize();
 		}
+
+		int getFileSize()
+        {
+            NSFile::CFileBinary file;
+            if (file.OpenFile(*m_sFileFrom))
+                return file.GetFileSize();
+            return 0;
+        }
+
 		int getEncodingByContent()
 		{
 			int nRes = -1;

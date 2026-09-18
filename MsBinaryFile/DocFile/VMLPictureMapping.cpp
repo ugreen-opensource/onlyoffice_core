@@ -48,7 +48,7 @@
 
 #include "../../OOXML/DocxFormat/Math/oMathPara.h"
 #include "../../OOXML/DocxFormat/Logic/Paragraph.h"
-
+#include "../Common/Base/FormatUtils.h"
 using namespace DocFileFormat;
 
 
@@ -577,6 +577,8 @@ namespace DocFileFormat
 		bool result = false;
 
 		BlipStoreEntry* pBlipEntry = pict->blipStoreEntry;
+		std::wstring cacheDir = m_context->_doc->GetTempMediaDir();
+		std::wstring strIndex = FormatUtils::SizeTToWideString(m_context->_docx->ImagesList.size() + 1);
 
 		if (pict->embeddedData && pict->embeddedDataSize > 0)
 		{
@@ -611,7 +613,8 @@ namespace DocFileFormat
 			}
 
 			m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(btWin32),
-				pict->embeddedData, pict->embeddedDataSize, btWin32));
+				pict->embeddedData, pict->embeddedDataSize,cacheDir, 
+				m_context->_docx->ImagesList.size() + 1, btWin32));
 
 			m_nImageId = m_context->_docx->RegisterImage(m_caller, btWin32);
 			result = true;
@@ -626,12 +629,12 @@ namespace DocFileFormat
 				MetafilePictBlip* metaBlip = static_cast<MetafilePictBlip*>(pBlipEntry->Blip);
 				if (metaBlip)
 				{//decompress inside MetafilePictBlip
-					unsigned char* newData = NULL;
-					unsigned int newDataSize = metaBlip->oMetaFile.ToBuffer(newData);
-
-					boost::shared_array<unsigned char> arData(newData);
-					m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(pBlipEntry->btWin32), arData, newDataSize));
+					
+					std::wstring tmpFile = cacheDir + FILE_SEPARATOR_STR + std::wstring(L"image") + strIndex + GetTargetExt(pBlipEntry->btWin32);
+					metaBlip->oMetaFile.ToFile(tmpFile);
+					m_context->_docx->ImagesList.push_back(ImageFileStructure(tmpFile));
 				}
+				
 			}break;
 			case Global::msoblipDIB:
 			{//user_manual_v52.doc
@@ -639,17 +642,9 @@ namespace DocFileFormat
 				BitmapBlip* bitBlip = static_cast<BitmapBlip*>(pBlipEntry->Blip);
 				if (bitBlip)
 				{
-					std::wstring file_name = m_context->_doc->m_sTempFolder + FILE_SEPARATOR_STR + L"tmp_image";
-					pBlipEntry->btWin32 = ImageHelper::SaveImageToFileFromDIB(bitBlip->m_pvBits, bitBlip->pvBitsSize, file_name);
-
-					unsigned char* pData = NULL;
-					DWORD nData = 0;
-					if (NSFile::CFileBinary::ReadAllBytes(file_name, &pData, nData))
-					{
-						m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(pBlipEntry->btWin32),
-							boost::shared_array<unsigned char>(pData), nData, pBlipEntry->btWin32));
-					}
-					NSFile::CFileBinary::Remove(file_name);
+					std::wstring tmpFile = cacheDir + FILE_SEPARATOR_STR + std::wstring(L"image") + strIndex;
+					pBlipEntry->btWin32 = ImageHelper::SaveImageToFileFromDIB(bitBlip->m_pvBits, bitBlip->pvBitsSize, tmpFile);
+					m_context->_docx->ImagesList.push_back(ImageFileStructure(tmpFile));
 				}
 			}break;
 			case Global::msoblipPICT:
@@ -663,25 +658,17 @@ namespace DocFileFormat
 					CBgraFrame bgraFrame;
 					if (bgraFrame.Decode(newData, newDataSize))
 					{
-						std::wstring file_name = m_context->_doc->m_sTempFolder + FILE_SEPARATOR_STR + L"tmp_image";
-						bgraFrame.SaveFile(file_name, 4); // png
-
-						unsigned char* pData = NULL;
-						DWORD nData = 0;
-						if (NSFile::CFileBinary::ReadAllBytes(file_name, &pData, nData))
-						{
-							pBlipEntry->btWin32 = Global::msoblipPNG;
-
-							m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(pBlipEntry->btWin32),
-								boost::shared_array<unsigned char>(pData), nData, pBlipEntry->btWin32));
-						}
-						NSFile::CFileBinary::Remove(file_name);
+						pBlipEntry->btWin32 = Global::msoblipPNG;
+						std::wstring tmpFile = cacheDir + FILE_SEPARATOR_STR + std::wstring(L"image") + strIndex + GetTargetExt(pBlipEntry->btWin32);
+						if (bgraFrame.SaveFile(tmpFile, 4)) // png
+							m_context->_docx->ImagesList.push_back(ImageFileStructure(tmpFile));
 					}
 					else
 					{
 						m_context->_docx->ImagesList.push_back(ImageFileStructure(metaBlip->oMetaFile.m_sExtension,
-							newData, newDataSize, pBlipEntry->btWin32));
+							newData, newDataSize, cacheDir, m_context->_docx->ImagesList.size() + 1,pBlipEntry->btWin32));
 					}
+					RELEASEARRAYOBJECTS(newData);
 				}
 			}break;
 			case Global::msoblipJPEG:
@@ -693,7 +680,7 @@ namespace DocFileFormat
 				if (bitBlip)
 				{
 					m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(pBlipEntry->btWin32),
-						bitBlip->m_pvBits, bitBlip->pvBitsSize, pBlipEntry->btWin32));
+						bitBlip->m_pvBits, bitBlip->pvBitsSize, cacheDir, m_context->_docx->ImagesList.size() + 1, pBlipEntry->btWin32));
 				}
 			}break;
 

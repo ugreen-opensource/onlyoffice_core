@@ -88,19 +88,67 @@ namespace DocFileFormat
 
 	struct ImageFileStructure
 	{
-		ImageFileStructure(const std::wstring& _ext, boost::shared_array<unsigned char> _data, unsigned int _size, Global::BlipType _blipType = Global::msoblipUNKNOWN) : ext(_ext), data(_data), size(_size), blipType(_blipType)
+		ImageFileStructure(const std::wstring& tmpPathFileName)
+		:pathFileName(tmpPathFileName), size(0), blipType(Global::msoblipUNKNOWN)
 		{
-
+			size_t pos = tmpPathFileName.find_last_of(L'.');
+			size_t sep = tmpPathFileName.find_last_of(L"/\\");
+			if (pos != std::wstring::npos && (sep == std::wstring::npos || pos > sep))
+				ext = tmpPathFileName.substr(pos);
 		}
-		ImageFileStructure(const std::wstring& _ext, unsigned char* _data, unsigned int _size, Global::BlipType _blipType = Global::msoblipUNKNOWN) : ext(_ext), size(_size), blipType(_blipType)
+
+		ImageFileStructure(const std::wstring& _ext, boost::shared_array<unsigned char> _data, 
+			unsigned int _size, std::wstring& _cacheDir, int _index,
+			 Global::BlipType _blipType = Global::msoblipUNKNOWN) 
+			 : ext(_ext), size(_size), blipType(_blipType)
 		{
+			std::wstring tmpPathFileName = SaveToFile(_cacheDir, _index, _data.get(), _size);
+			if (!tmpPathFileName.empty())	
+			{
+				pathFileName = tmpPathFileName;
+				return;
+			}
+			data = _data;
+		}
+
+		ImageFileStructure(const std::wstring& _ext, unsigned char* _data, unsigned int _size,
+			std::wstring& _cacheDir, int _index, Global::BlipType _blipType = Global::msoblipUNKNOWN)
+			: ext(_ext), size(_size), blipType(_blipType)
+		{
+			std::wstring tmpPathFileName = SaveToFile(_cacheDir, _index, _data, _size);
+			if (!tmpPathFileName.empty())	
+			{
+				pathFileName = tmpPathFileName;
+				return;
+			}
 			data = boost::shared_array<unsigned char>(new unsigned char[size]);
 			memcpy(data.get(), _data, size);
 		}
+
+
+		std::wstring SaveToFile( const std::wstring& _cacheDir,int _index, const void* buf, unsigned int size )
+		{
+			if (!_cacheDir.empty() && buf != NULL)
+			{
+				std::wstring strIndex = FormatUtils::SizeTToWideString(_index);
+				std::wstring tmpPathFileName = _cacheDir + FILE_SEPARATOR_STR + std::wstring(L"image") + strIndex + ext;
+				
+				NSFile::CFileBinary file;
+				if (file.CreateFileW(tmpPathFileName))
+				{
+					file.WriteFile( (BYTE*)buf, size);
+					file.CloseFile();
+					return tmpPathFileName;
+				}
+			}
+			return L"";
+		}
+
 		std::wstring						ext;
 		boost::shared_array<unsigned char>	data;
 		unsigned int						size;
-		Global::BlipType					blipType;	
+		Global::BlipType					blipType;
+		std::wstring 						pathFileName;
 	};
 
 	struct OleObjectFileStructure

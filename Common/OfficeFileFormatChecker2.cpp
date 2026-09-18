@@ -787,7 +787,8 @@ bool COfficeFileFormatChecker::isOfficeFile(const std::wstring &_fileName)
 	file.ReadFile(bufferDetect, MIN_SIZE_BUFFER, dwDetectdBytes);
 
 	COfficeUtils OfficeUtils(NULL);
-	if (OfficeUtils.IsArchive(fileName) == S_OK && (false == isPdfFormatFile(bufferDetect, dwDetectdBytes, sDocumentID)))
+	bool isZip = (S_OK == OfficeUtils.IsArchive(fileName));
+	if (isZip && (false == isPdfFormatFile(bufferDetect, dwDetectdBytes, sDocumentID)))
 	{
 		if (isOOXFormatFile(fileName))
         {
@@ -838,6 +839,10 @@ bool COfficeFileFormatChecker::isOfficeFile(const std::wstring &_fileName)
 			bufferDetect = NULL;
 			return true;
 		}
+	}
+	else if (!isZip && S_OK == OfficeUtils.IsZipSignature(fileName)) // distinguish corrupted zip from non-zip
+	{
+		isZip = true;
 	}
 
 	//-----------------------------------------------------------------------------------------------
@@ -975,7 +980,7 @@ bool COfficeFileFormatChecker::isOfficeFile(const std::wstring &_fileName)
 	else if (0 == sExt.compare(L".scsv"))
 		nFileType = AVS_OFFICESTUDIO_FILE_SPREADSHEET_SCSV;	
 	else if (0 == sExt.compare(L".csv") || 0 == sExt.compare(L".tsv") || 0 == sExt.compare(L".dsv") || 0 == sExt.compare(L".cssv")
-		|| 0 == sExt.compare(L".xls") || 0 == sExt.compare(L".xlsx") || 0 == sExt.compare(L".xlsb"))
+		|| 0 == sExt.compare(L".xls") || (0 == sExt.compare(L".xlsx") && !isZip) || 0 == sExt.compare(L".xlsb"))
 		nFileType = AVS_OFFICESTUDIO_FILE_SPREADSHEET_CSV;
 	else if (0 == sExt.compare(L".html") || 0 == sExt.compare(L".htm"))
 		nFileType = AVS_OFFICESTUDIO_FILE_DOCUMENT_HTML;
@@ -983,7 +988,7 @@ bool COfficeFileFormatChecker::isOfficeFile(const std::wstring &_fileName)
 		nFileType = AVS_OFFICESTUDIO_FILE_CANVAS_PDF;
 	else if (0 == sExt.compare(L".doct")) // case of archive with html viewer
 		nFileType = AVS_OFFICESTUDIO_FILE_TEAMLAB_DOCY;
-	else if (0 == sExt.compare(L".txt") || 0 == sExt.compare(L".xml") || 0 == sExt.compare(L".rtf")	|| 0 == sExt.compare(L".doc") || 0 == sExt.compare(L".docx"))
+	else if (0 == sExt.compare(L".txt") || 0 == sExt.compare(L".xml") || 0 == sExt.compare(L".rtf")	|| 0 == sExt.compare(L".doc") || (0 == sExt.compare(L".docx") && !isZip))
 		nFileType = AVS_OFFICESTUDIO_FILE_DOCUMENT_TXT;
 	else if (0 == sExt.compare(L".pages"))
 		nFileType = AVS_OFFICESTUDIO_FILE_DOCUMENT_PAGES;

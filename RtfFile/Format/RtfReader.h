@@ -103,7 +103,7 @@ public:
 
 	virtual bool ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader, std::string sKey, bool bHasPar, int nPar );
 
-	virtual void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText );
+	virtual void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText );
 	virtual void ExitReader( RtfDocument& oDocument, RtfReader& oReader );
 	virtual void ExitReader2( RtfDocument& oDocument, RtfReader& oReader );
 
@@ -112,7 +112,7 @@ public:
 
 	void ExecuteTextInternalSkipChars(std::wstring & sResult, RtfReader& oReader, std::string & sKey, int& nSkipChars);
 	void ExecuteTextInternalSkipChars(std::string & sResult, RtfReader& oReader, std::string & sKey, int& nSkipChars);
-	std::wstring ExecuteTextInternalCodePage( std::string & sCharString, RtfDocument & oDocument, RtfReader & oReader);
+	void ExecuteTextInternalCodePage( std::string & sCharString, RtfDocument & oDocument, RtfReader & oReader, std::wstring& sResult);
 	
 	bool		m_bUseGlobalCodepage;
 	bool		m_bStopReader;

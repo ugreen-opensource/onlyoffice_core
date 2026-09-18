@@ -155,10 +155,28 @@ namespace DocFileFormat
 
 			int i = 1;
 
+			std::wstring tmpDir;
 			for (std::list<ImageFileStructure>::iterator iter = ImagesList.begin(); iter != ImagesList.end(); ++iter)
 			{
-				SaveToFile(pathMedia, std::wstring(L"image" ) + FormatUtils::IntToWideString(i++) + iter->ext, (void*)iter->data.get(), iter->size);
+				std::wstring pathFileName =  std::wstring(L"image" ) + FormatUtils::IntToWideString(i++) + iter->ext;
+				if (!iter->pathFileName.empty() && nullptr == iter->data.get())
+				{
+					if (tmpDir.empty())
+					{
+						size_t found = iter->pathFileName.find_last_of(L"/\\");
+						if (found != std::wstring::npos) {
+							tmpDir =  iter->pathFileName.substr(0, found);
+						}
+					}
+					std::wstring mediaPathFileName = pathMedia + FILE_SEPARATOR_STR + pathFileName;
+					NSFile::CFileBinary::Move(iter->pathFileName.c_str(), mediaPathFileName.c_str());
+				}	
+				else
+					SaveToFile(pathMedia, pathFileName, (void*)iter->data.get(), iter->size);
 			}
+
+			
+			NSDirectory::DeleteDirectory(tmpDir);
 		}
 
 		if (!OleObjectsList.empty())

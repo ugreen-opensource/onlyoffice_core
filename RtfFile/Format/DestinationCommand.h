@@ -123,7 +123,7 @@ private:
 public:
 	TextReader( std::wstring& sName, bool bErease = true );
 
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 };
 
 class RtfCharPropsCommand
@@ -205,7 +205,7 @@ public:
 	void ExecuteTextInternal2( RtfDocument& oDocument, RtfReader& oReader, std::string & sKey, int& nSkipChars);
 
 	std::wstring RemoveLastUnchar(std::wstring str);
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 	void PopState(RtfDocument& oDocument, RtfReader& oReader);
 };
 
@@ -219,7 +219,7 @@ public:
 	RtfColorTableReader();
 
 	bool ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader, std::string sKey, bool bHasPar, int nPar );
-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText );
+	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText );
 };
 
 class RtfDefCharPropReader: public RtfAbstractReader
@@ -237,7 +237,7 @@ public:
 	RtfRevisionTableReader();
 
 	bool ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader, std::string sKey, bool bHasPar, int nPar );
-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText );
+	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText );
 
 private:
 	std::wstring m_sCurrent;
@@ -254,7 +254,7 @@ public:
 	RtfInfoReader();
 
 	bool ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader,  std::string sCommand, bool hasParameter, int parameter);
-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText );
+	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText );
 };
 
 class RtfPictureReader :  public RtfAbstractReader
@@ -300,7 +300,7 @@ public:
 	RtfPictureReader( RtfReader& oReader, RtfShape& oShape );
 	~RtfPictureReader();
 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 	void ExitReader( RtfDocument& oDocument, RtfReader& oReader );
 };
 
@@ -322,7 +322,7 @@ public:
 	RtfOleBinReader();
 
 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 	void GetData( BYTE** ppData, long& nSize);
 };
 
@@ -370,7 +370,7 @@ public:
 
 			bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader,  std::string sCommand, bool hasParameter, int parameter);
 			void PopState( RtfDocument& oDocument, RtfReader& oReader );
-			void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText);
+			void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText);
 		};
 
 	private:
@@ -460,7 +460,7 @@ public:
 	RtfMathReader(RtfMathPtr& pMath);
 
 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 	std::wstring ExecuteMathProp(RtfDocument& oDocument, std::string sCommand, int parameter);
 	void ExitReader2( RtfDocument& oDocument, RtfReader& oReader );
 };
@@ -493,7 +493,7 @@ public:
 	RtfAnnotElemReader( RtfAnnotElem& oAnnot );
 
 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 };
 
 class RtfBookmarkStartReader: public RtfAbstractReader
@@ -504,7 +504,7 @@ public:
 	RtfBookmarkStartReader( RtfBookmarkStart& oBookmark );
 
 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 };
 
 class RtfBookmarkEndReader: public RtfAbstractReader
@@ -513,7 +513,7 @@ public:
 	RtfBookmarkEnd& m_oBookmarkEnd;
 
 	RtfBookmarkEndReader( RtfBookmarkEnd& oBookmark );
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 };
 
 class FootnoteReader;
@@ -551,7 +551,7 @@ public:
 	RtfParagraphPropDestination( );
 
 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader,RtfAbstractReader& oAbstrReader, std::string sCommand, bool hasParameter, int parameter);
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 
 	void AddItem( RtfParagraphPtr oItem, RtfReader& oReader, bool bEndCell, bool bEndRow );
 	
@@ -571,7 +571,7 @@ public:
 	RtfFootnoteReader( RtfFootnote& oRtfFootnote );
 
 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText );
+	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText );
 	void ExitReader( RtfDocument& oDocument, RtfReader& oReader );
 };
 
@@ -586,7 +586,7 @@ public:
 	RtfAnnotationReader( RtfAnnotation& oRtfAnnotation );
 
 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText );
+	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText );
 	void ExitReader( RtfDocument& oDocument, RtfReader& oReader );
 };
 
@@ -727,7 +727,7 @@ class RtfStyleTableReader: public RtfAbstractReader
 		RtfStyleReader();
 
 		bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
-		void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+		void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 		void ExitReader(RtfDocument& oDocument, RtfReader& oReader);
 	};
 
@@ -831,7 +831,7 @@ public:
 	RtfNormalReader( RtfDocument& oDocument, RtfReader& oReader );
 
 	bool ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter );
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 	void ExitReader(RtfDocument& oDocument, RtfReader& oReader);
 
 private: 
@@ -849,7 +849,7 @@ public:
 	RtfParagraphReader(std::string sHeader, RtfReader& oReader);
 
 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 	void ExitReader(RtfDocument& oDocument, RtfReader& oReader);
 };
 
@@ -859,7 +859,7 @@ public:
 	RtfFormFieldReader(RtfFormField& oFormField);
 	
 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
+	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
 
 private:
 	enum _InternalState {
@@ -878,6 +878,6 @@ public:
 	RtfFieldInstReader( RtfFieldInst& oFieldInst );
 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader , std::string sCommand, bool hasParameter, int parameter);
 
-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText );
+	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText );
 	void ExitReader( RtfDocument& oDocument, RtfReader& oReader );
 };

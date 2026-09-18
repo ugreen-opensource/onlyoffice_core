@@ -130,6 +130,6 @@ namespace DocFileFormat
 
 			m_pXmlWriter->WriteNodeEnd( L"w:footnotes");
 
-			m_context->_docx->FootnotesXML = std::wstring(m_pXmlWriter->GetXmlString());
+			m_context->_docx->FootnotesXML = m_pXmlWriter->TakeXmlString();
 	}
 }

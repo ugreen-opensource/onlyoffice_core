@@ -98,7 +98,7 @@ namespace DocFileFormat
 
 			m_pXmlWriter->WriteNodeEnd( L"w:endnotes");
 
-			m_context->_docx->EndnotesXML = std::wstring( m_pXmlWriter->GetXmlString() );
+			m_context->_docx->EndnotesXML = m_pXmlWriter->TakeXmlString();
 		}
 	}
 }

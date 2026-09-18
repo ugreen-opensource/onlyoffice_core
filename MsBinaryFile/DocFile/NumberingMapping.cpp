@@ -221,7 +221,7 @@ namespace DocFileFormat
 
             m_pXmlWriter->WriteNodeEnd(L"w:numbering");
 
-			m_xmldocument->NumberingXML = std::wstring(m_pXmlWriter->GetXmlString());
+			m_xmldocument->NumberingXML = m_pXmlWriter->TakeXmlString();
 		}
 	}
 

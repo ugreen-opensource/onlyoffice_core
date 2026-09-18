@@ -34,6 +34,9 @@
  */
 
 #include "RtfLex.h"
+#include <iostream>
+
+#define RTF_CHUNK_SIZE (1024*64*1) //64KB
 
 StringStream::StringStream()
 {
@@ -50,50 +53,130 @@ void StringStream::Clear()
 
 	m_nSizeAbs = 0;
 	m_nPosAbs = -1;
+	m_nBlockSize = 0;
+	m_nBlockStart = 0;
+	m_ungetcBuffer.clear();
+	m_srcFile.CloseFile();
 }
-bool StringStream::SetSource( std::wstring sPath  )
+
+bool StringStream::SetSource( std::wstring sPath )
+{
+	return SetSource(sPath, true);
+}
+bool StringStream::SetSource( std::wstring sPath, bool bReadByChunk)
 {
 	Clear();
+	m_bReadByBlock = bReadByChunk;
+	if (false == m_srcFile.OpenFile(sPath.c_str())) return false;
 
-	NSFile::CFileBinary srcFile;
-	if (false == srcFile.OpenFile(sPath.c_str())) return false;
-
-	__int64 totalFileSize = srcFile.GetFileSize();
+	__int64 totalFileSize = m_srcFile.GetFileSize();
 	if (totalFileSize < 5)
 	{
-		srcFile.CloseFile();
+		m_srcFile.CloseFile();
 		return false;
 	}
-
 	m_nSizeAbs = (long)totalFileSize;
-	m_aBuffer = new unsigned char[m_nSizeAbs];
+	m_aBuffer = new unsigned char[RTF_CHUNK_SIZE];
+	
 	DWORD dwBytesRead = 0;
-
-	srcFile.ReadFile(m_aBuffer, (DWORD)m_nSizeAbs);
-
-	dwBytesRead = (DWORD)srcFile.GetPosition();
-	srcFile.CloseFile();
+	m_srcFile.ReadFile(m_aBuffer, RTF_CHUNK_SIZE, dwBytesRead);
+	m_nBlockSize = dwBytesRead;
+	m_nBlockStart = 0;
 	return true;
 }
+
+void StringStream::ReadNextBlock(){
+
+	memset(m_aBuffer, 0, RTF_CHUNK_SIZE);
+	DWORD dwBytesRead = 0;
+	m_srcFile.ReadFile(m_aBuffer, RTF_CHUNK_SIZE, dwBytesRead);
+	if (dwBytesRead < RTF_CHUNK_SIZE)
+		m_srcFile.CloseFile();
+
+	m_nBlockStart += m_nBlockSize;
+	m_nBlockSize = dwBytesRead;
+}
+
 void StringStream::getBytes( int nCount, BYTE** pbData )
 {
-	if( m_nPosAbs + nCount < m_nSizeAbs )
+	if (!m_bReadByBlock)
 	{
-		(*pbData) = new BYTE[nCount];
-		memcpy( (*pbData), (m_aBuffer + m_nPosAbs + 1), nCount);
-		m_nPosAbs += nCount;
+		if( m_nPosAbs + nCount < m_nSizeAbs )
+		{
+			(*pbData) = new BYTE[nCount];
+			memcpy( (*pbData), (m_aBuffer + m_nPosAbs + 1), nCount);
+			m_nPosAbs += nCount;
+		}
+	}
+	else
+	{
+
+		if ( m_nPosAbs + nCount < m_nSizeAbs )
+		{
+			(*pbData) = new BYTE[nCount];
+			int nBytesRead = 0;
+
+			while (nBytesRead < nCount && !m_ungetcBuffer.empty()) {
+				(*pbData)[nBytesRead++] = m_ungetcBuffer.back();
+				m_ungetcBuffer.pop_back();
+			}
+
+			while(nBytesRead < nCount)
+			{
+				LONG64 startPos = m_nPosAbs + 1 - m_nBlockStart;
+				if (m_nPosAbs + nCount < m_nBlockStart + m_nBlockSize)
+				{
+					memcpy( (*pbData), (m_aBuffer + startPos), nCount);
+					break;
+				}
+				else{
+					int nCount1 = m_nBlockStart + m_nBlockSize -1 - m_nPosAbs;
+					memcpy( (*pbData), (m_aBuffer + startPos), nCount1);
+					nBytesRead += nCount1;
+					m_nPosAbs += nCount1;
+					ReadNextBlock();
+				}
+			}
+		}
 	}
 }
+
 int StringStream::getc()
 {
 	int nResult = EOF;
-	if( m_nPosAbs + 1 < m_nSizeAbs )
+	if (!m_ungetcBuffer.empty()) {
+		nResult = m_ungetcBuffer.back();
+		m_ungetcBuffer.pop_back();
+		return nResult;
+	}
+
+	if (m_nPosAbs + 1 >= m_nSizeAbs)
+		return nResult;
+
+	if (!m_bReadByBlock)
 	{
 		m_nPosAbs++;
 		nResult = m_aBuffer[ m_nPosAbs ];
 	}
+	else
+	{
+		if (m_nPosAbs + 1 <= m_nBlockStart + m_nBlockSize -1)
+		{
+			LONG64 startPos = m_nPosAbs + 1 - m_nBlockStart;
+			nResult = m_aBuffer[ startPos ];
+			m_nPosAbs++;
+		}
+		else
+		{
+			ReadNextBlock();
+			m_nPosAbs++;
+			nResult = m_aBuffer[ 0 ];
+		}
+	}
 	return nResult;
 }
+
+/*
 void StringStream::ungetc()
 {
 	//in the project ungetc is used only after getc
@@ -102,7 +185,16 @@ void StringStream::ungetc()
 	{
 		m_nPosAbs--;	//take any txt rename to rtf - infinite loop
 	}
+}*/
+
+void StringStream::ungetc(char c) {
+	if (m_ungetcBuffer.size() < RTF_CHUNK_SIZE) {
+		m_ungetcBuffer.push_back(c);
+	} else {
+		std::cerr << "ungetc buffer overflow!" << std::endl;
+	}
 }
+
 void StringStream::putString( std::string sText )
 {
 	size_t nExtBufSize = sText.length();
@@ -134,8 +226,9 @@ LONG64 StringStream::getSize()
 RtfLex::RtfLex()
 {
 	m_oFileWriter = NULL;
-	m_nReadBufSize = 1024 * 1024 * 5; // 5MB
-	m_caReadBuffer = new char[m_nReadBufSize];
+	m_nReadBufSize = RTF_CHUNK_SIZE;
+	m_nAbsSize = 0;
+	m_caReadBuffer = NULL;
 }
 RtfLex::~RtfLex()
 {
@@ -149,14 +242,14 @@ double RtfLex::GetProgress()
 }
 bool RtfLex::SetSource( std::wstring sPath )
 {
-	if (false == m_oStream.SetSource(sPath)) return false;
+	if (false == m_oStream.SetSource(sPath, true)) return false;
 
-	if (m_oStream.getSize() > m_nReadBufSize)
-	{
-		m_nReadBufSize = (int)m_oStream.getSize() ;
-		if (m_caReadBuffer) delete []m_caReadBuffer;
-		m_caReadBuffer = new char[m_nReadBufSize];
-	}
+	if (m_oStream.getSize() < m_nReadBufSize) 
+		m_nReadBufSize = m_oStream.getSize();
+
+	m_nAbsSize = m_oStream.getSize();
+	if (m_caReadBuffer) delete []m_caReadBuffer;
+	m_caReadBuffer = new char[m_nReadBufSize];
 	return true;
 }
 void RtfLex::CloseSource()
@@ -224,7 +317,7 @@ void RtfLex::parseKeyword(RtfToken& token)
 	int parametroInt = 0;
 
 	int c = m_oStream.getc();
-	m_oStream.ungetc();
+	m_oStream.ungetc(c);
 	bool negativo = false;
 
 	if ( !RtfUtility::IsAlpha( c ) )
@@ -279,7 +372,7 @@ void RtfLex::parseKeyword(RtfToken& token)
 		return;
 	}
 	c = m_oStream.getc();
-	m_oStream.ungetc();
+	m_oStream.ungetc(c);
 
 	while (RtfUtility::IsAlpha(c))
 	{
@@ -287,7 +380,7 @@ void RtfLex::parseKeyword(RtfToken& token)
 		palabraClave += (char)c;
 
 		c = m_oStream.getc();
-		m_oStream.ungetc();
+		m_oStream.ungetc(c);
 	}
 
 	token.Type = RtfToken::Keyword;
@@ -305,14 +398,14 @@ void RtfLex::parseKeyword(RtfToken& token)
 		}
 
 		c = m_oStream.getc();
-		m_oStream.ungetc();
+		m_oStream.ungetc(c);
 		while (RtfUtility::IsDigit(c))
 		{
 			m_oStream.getc();
 			parametroStr += c;
 
 			c = m_oStream.getc();
-			m_oStream.ungetc();
+			m_oStream.ungetc(c);
 		}
 		try
 		{
@@ -348,6 +441,7 @@ void RtfLex::parseKeyword(RtfToken& token)
 		m_oStream.getc();
 	}
 }
+
 void RtfLex::parseText(int car, RtfToken& token)
 {
 	int nTempBufPos = 0; //1 MB
@@ -358,13 +452,27 @@ void RtfLex::parseText(int car, RtfToken& token)
 	//while (c != ';' &&c ! = '\\' && c != '}' && c != '{' && c != EOF)
 	while (c != '\\' && c != '}' && c != '{' && c != EOF)
 	{
-		if( nTempBufPos >= m_nReadBufSize )
+		if (nTempBufPos >= m_nAbsSize)
 		{
 			m_caReadBuffer[nTempBufPos++] = '\0';
-			token.Key += m_caReadBuffer ;
-			nTempBufPos = 0;
+ 			token.Key += m_caReadBuffer ;
+ 			nTempBufPos = 0;
+			memset(m_caReadBuffer, 0, m_nReadBufSize);
 		}
-		m_caReadBuffer[nTempBufPos++] = (char)c;
+		else
+		{
+			if (nTempBufPos < m_nReadBufSize)
+			{
+				m_caReadBuffer[nTempBufPos++] = (char)c;
+			}
+			else
+			{
+				token.Key += m_caReadBuffer;
+				memset(m_caReadBuffer, 0, m_nReadBufSize);
+				nTempBufPos = 0;
+				m_caReadBuffer[nTempBufPos++] = (char)c;
+			}
+		}
 
 		c = m_oStream.getc();
 		//Se ignoran los retornos de carro, tabuladores y caracteres nulos
@@ -373,24 +481,65 @@ void RtfLex::parseText(int car, RtfToken& token)
 	}
 	if (c != EOF)
 	{
-		m_oStream.ungetc();
+		m_oStream.ungetc(c);
 	}
 	if( nTempBufPos > 0 )
 	{
+		// token.Key += m_caReadBuffer;
+		// memset(m_caReadBuffer, 0, m_nReadBufSize);
+		// token.Key +='\0';
+		// nTempBufPos = 0;
+
 		m_caReadBuffer[nTempBufPos++] = '\0';
-		token.Key += m_caReadBuffer ;
+ 		token.Key += m_caReadBuffer ;
+		memset(m_caReadBuffer, 0, m_nReadBufSize);
+		nTempBufPos = 0;
 	}
 }
+
+// void RtfLex::parseText(int car, RtfToken& token)
+// {
+// 	int nTempBufPos = 0; //1 мб
+
+// 	int c = car;
+// 	//while ((isalnum(c) || c == '"'|| c == ':'|| c == '/' || c == '.') &&c != '\\' && c != '}' && c != '{' && c != Eof) // иправиЃEЃEрвьD усЃEвиЃE
+// 	//while (c != '\\' && c != '}' && c != '{' && c != Eof)
+// 	//while (c != ';' &&c ! = '\\' && c != '}' && c != '{' && c != EOF)
+// 	while (c != '\\' && c != '}' && c != '{' && c != EOF)
+// 	{
+// 		if( nTempBufPos >= m_nReadBufSize )
+// 		{
+// 			m_caReadBuffer[nTempBufPos++] = '\0';
+// 			token.Key += m_caReadBuffer ;
+// 			nTempBufPos = 0;
+// 		}
+// 		m_caReadBuffer[nTempBufPos++] = (char)c;
+
+// 		c = m_oStream.getc();
+// 		//Se ignoran los retornos de carro, tabuladores y caracteres nulos
+// 		while (c == '\r' || c == '\n')
+// 			c = m_oStream.getc();
+// 	}
+// 	if (c != EOF)
+// 	{
+// 		m_oStream.ungetc(c);
+// 	}
+// 	if( nTempBufPos > 0 )
+// 	{
+// 		m_caReadBuffer[nTempBufPos++] = '\0';
+// 		token.Key += m_caReadBuffer ;
+// 	}
+// }
 bool RtfLex::GetNextChar( int& nChar )
 {
 	int c = m_oStream.getc();
-	m_oStream.ungetc();
+	m_oStream.ungetc(c);
 	//Se ignoran los retornos de carro, tabuladores y caracteres nulos
 	while (c == '\r' || c == '\n')
 	{
 		m_oStream.getc();
 		c = m_oStream.getc();
-		m_oStream.ungetc();
+		m_oStream.ungetc(c);
 	}
 	if( c != '\\' && c != '}' && c != '{' && c != EOF )
 	{

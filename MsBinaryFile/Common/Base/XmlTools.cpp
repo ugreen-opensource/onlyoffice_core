@@ -311,6 +311,11 @@ namespace XMLTools
 	{
 		return m_str;
 	}
+
+	std::wstring CStringXmlWriter::TakeXmlString()
+	{
+		return std::move(m_str);
+	}
 	void CStringXmlWriter::SetXmlString(const std::wstring& strValue)
 	{
 		m_str = strValue;

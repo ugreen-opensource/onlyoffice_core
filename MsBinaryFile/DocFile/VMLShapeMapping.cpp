@@ -1529,8 +1529,9 @@ namespace DocFileFormat
 	bool VMLShapeMapping::copyPicture(BlipStoreEntry* oBlip)
 	{
 		bool result = false;
-
+		std::wstring cacheDir = m_context->_doc->GetTempMediaDir();
 		//write the blip
+		
 		if (oBlip)
 		{
 			VirtualStreamReader reader(m_context->_doc->WordDocumentStream, oBlip->foDelay, m_context->_doc->nWordVersion);
@@ -1554,7 +1555,8 @@ namespace DocFileFormat
 						if (0 != decompressedSize && NULL != decompressed)
 						{
 							boost::shared_array<unsigned char> arDecompressed(decompressed);
-							m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(oBlip->btWin32), arDecompressed, decompressedSize));
+							m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(oBlip->btWin32), arDecompressed,
+							 decompressedSize, cacheDir, m_context->_docx->ImagesList.size() + 1));
 							result = true;	
 						}
 						RELEASEOBJECT(metaBlip);
@@ -1571,22 +1573,17 @@ namespace DocFileFormat
 					{
 						if (oBlip->btWin32 == Global::msoblipDIB)
 						{
-							std::wstring file_name = m_context->_doc->m_sTempFolder + FILE_SEPARATOR_STR + L"tmp_image";
-
-							oBlip->btWin32 = ImageHelper::SaveImageToFileFromDIB(bitBlip->m_pvBits, bitBlip->pvBitsSize, file_name);
-							
-							unsigned char* pData = NULL;
-							DWORD nData = 0;
-							if (NSFile::CFileBinary::ReadAllBytes(file_name, &pData, nData))
-							{
-								m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(oBlip->btWin32), 
-									boost::shared_array<unsigned char>(pData), nData, oBlip->btWin32));
-								result = true;	
-								break;
-							}//in case of conversion error - keep original dib
+							std::wstring strIndex = FormatUtils::SizeTToWideString(m_context->_docx->ImagesList.size() + 1);
+							std::wstring tmpFile = cacheDir + FILE_SEPARATOR_STR + std::wstring(L"image") + strIndex;
+							oBlip->btWin32 = ImageHelper::SaveImageToFileFromDIB(bitBlip->m_pvBits, bitBlip->pvBitsSize, tmpFile);
+							m_context->_docx->ImagesList.push_back(ImageFileStructure(tmpFile));
 						}
-						m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(oBlip->btWin32), 
-							bitBlip->m_pvBits, bitBlip->pvBitsSize, oBlip->btWin32));
+						else
+						{
+							m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(oBlip->btWin32),
+							bitBlip->m_pvBits, bitBlip->pvBitsSize, cacheDir,
+							m_context->_docx->ImagesList.size() + 1, oBlip->btWin32));
+						}
 						RELEASEOBJECT (bitBlip);
 						result = true;
 					}break;

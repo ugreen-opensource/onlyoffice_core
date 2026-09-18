@@ -106,6 +106,11 @@ namespace DocFileFormat
 		nDocumentCodePage	= ENCODING_WINDOWS_1250;
 		nFontsCodePage		= ENCODING_WINDOWS_1250;
 		nDocumentCodePageInfo = 0;
+
+		if (!m_sTempFolder.empty())
+		{
+			m_sTempMediaFolder =  m_sTempFolder + FILE_SEPARATOR_STR + std::wstring(L"ugreen-media");
+		}
 	}
 
 	WordDocument::~WordDocument()
@@ -610,7 +615,7 @@ namespace DocFileFormat
             m_sTempFolder = NSFile::CFileBinary::GetTempPath();
 		}
 		m_sTempDecryptFileName	= m_sTempFolder + FILE_SEPARATOR_STR + L"~tempFile.doc";
-		
+		m_sTempMediaFolder =  m_sTempFolder + FILE_SEPARATOR_STR + L"ugreen-media";
 		POLE::Storage *storageOut	= new POLE::Storage(m_sTempDecryptFileName.c_str());
 
 		if (!storageOut)
@@ -659,7 +664,7 @@ namespace DocFileFormat
             m_sTempFolder = NSFile::CFileBinary::GetTempPath();
 		}
 		m_sTempDecryptFileName	= m_sTempFolder + FILE_SEPARATOR_STR + L"~tempFile.doc";
-		
+		m_sTempMediaFolder =  m_sTempFolder + FILE_SEPARATOR_STR + L"ugreen-media";
 		POLE::Storage *storageIn = m_pStorage->GetStorage();
 		CFCPP::CompoundFile* storageOut = new CFCPP::CompoundFile(CFCPP::Ver_3, CFCPP::Default);
 
@@ -1221,5 +1226,4 @@ namespace DocFileFormat
 		//	}
 		//}
 	}
-
 }

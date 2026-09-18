@@ -158,6 +158,7 @@ namespace XMLTools
 	public:
 		CStringXmlWriter();
 		std::wstring GetXmlString();
+		std::wstring TakeXmlString();
 
 		void SetXmlString(const std::wstring& strValue);
 		void Clear();

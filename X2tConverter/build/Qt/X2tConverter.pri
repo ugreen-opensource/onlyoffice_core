@@ -92,12 +92,14 @@ DEPENDPATH += $$PWD/../../../OOXML/Binary/Document
 SOURCES += \
 	../../../Common/OfficeFileFormatChecker2.cpp \
 	../../src/cextracttools.cpp \
-	../../src/ASCConverters.cpp
+	../../src/ASCConverters.cpp	\
+	../../src/log.cpp
 
 HEADERS += \
 	../../../Common/OfficeFileFormatChecker.h \
 	../../src/cextracttools.h \
-	../../src/ASCConverters.h
+	../../src/ASCConverters.h \
+	../../src/log.h
 
 HEADERS += \
 	../../src/lib/common.h \

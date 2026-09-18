@@ -39,7 +39,7 @@
 #include "ASCConverters.h"
 #include "cextracttools.h"
 #include "../../DesktopEditor/fontengine/ApplicationFontsWorker.h"
-
+#include "log.h"
 #include <iostream>
 
 #define VALUE_TO_STRING(x) #x
@@ -74,7 +74,9 @@ int wmain_lib(int argc, wchar_t *argv[])
 	// #define DEBUG_NEW new(_NORMAL_BLOCK, __FILE__, __LINE__)
 	// #define new DEBUG_NEW
 
+	x2t::Logger logger("/tmp", "x2t.log");
 	// check arguments
+
 	if (argc < 2)
 	{
 		// print out help topic
@@ -126,6 +128,10 @@ int wmain_lib(int argc, wchar_t *argv[])
 		NExtractTools::InputParams oInputParams;
 		if (oInputParams.FromXmlFile(sArg1) && (sArg2.empty() || oInputParams.FromXml(sArg2)))
 		{
+			logger.logInfo(std::string("FileTitle: ").append(logger.wstringToString(oInputParams.getTitle())));
+			long fileSize = std::lround(oInputParams.getFileSize()/1024);
+			logger.logInfo(std::string("FileSize: ").append(std::to_string(fileSize)).append("KB"));
+			
 			result = NExtractTools::fromInputParams(oInputParams);
 		}
 		else
@@ -212,5 +218,8 @@ int wmain_lib(int argc, wchar_t *argv[])
 		}
 	}
 	//_CrtDumpMemoryLeaks();
-	return getReturnErrorCode(result);
+
+	int nRetCode = getReturnErrorCode(result);
+	logger.logInfo(std::string("ReturnErrorCode: ").append(std::to_string(nRetCode)));
+	return nRetCode;
 }

@@ -1687,7 +1687,6 @@ namespace NExtractTools
 		
 		std::wstring sFileFrom = oInputParams.m_sFileFrom  ? *oInputParams.m_sFileFrom : L"";
 		std::wstring sFileTo = oInputParams.m_sFileTo ? *oInputParams.m_sFileTo : L"";
-
 		int nFormatFrom = AVS_OFFICESTUDIO_FILE_UNKNOWN;
 		if (NULL != oInputParams.m_nFormatFrom)
 			nFormatFrom = *oInputParams.m_nFormatFrom;

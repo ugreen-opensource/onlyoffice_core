@@ -38,28 +38,38 @@
 #include "Utils.h"
 #include "Basic.h"
 
+#include <deque>
+
 class StringStream
 {
 private: 
 	LONG64 m_nSizeAbs;//file size
 	LONG64 m_nPosAbs;//position in file
+	LONG64 m_nBlockSize;
+	LONG64 m_nBlockStart;
+
+	NSFile::CFileBinary m_srcFile;
 
 	unsigned char* m_aBuffer;
-
+	std::deque<char> m_ungetcBuffer;
+	bool m_bReadByBlock = true;
 public:
 	StringStream();
 	~StringStream();
 
 	void Clear();
-
+	bool SetSource( std::wstring sPath, bool bReadByChunk);
 	bool SetSource( std::wstring sPath  );
 	void getBytes( int nCount, BYTE** pbData );
 	int getc();
-	void ungetc();
+	//void ungetc();
+	void ungetc(char c);
 	void putString( std::string sText );
 
 	LONG64 getCurPosition();
 	LONG64 getSize();
+
+	void ReadNextBlock();
 };
 
 class RtfLex
@@ -72,6 +82,7 @@ public:
 	NFileWriter::CBufferedFileWriter* m_oFileWriter;
 	char* m_caReadBuffer;
 	int m_nReadBufSize;
+	int m_nAbsSize;
 
 	RtfLex();
 	~RtfLex();

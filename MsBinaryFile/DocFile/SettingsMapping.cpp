@@ -283,7 +283,7 @@ namespace DocFileFormat
 		//close w:settings
 		m_oXmlWriter.WriteNodeEnd( L"w:settings" );
 
-		this->_ctx->_docx->SettingsXML = std::wstring( m_oXmlWriter.GetXmlString() ); 
+		this->_ctx->_docx->SettingsXML = m_oXmlWriter.TakeXmlString(); 
 	}
 
 	void SettingsMapping::writeRsidList()

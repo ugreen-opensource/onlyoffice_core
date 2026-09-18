@@ -233,7 +233,7 @@ namespace DocFileFormat
 
         m_pXmlWriter->WriteNodeEnd( L"w:styles" );
 
-		this->_ctx->_docx->StyleSheetXML = std::wstring( m_pXmlWriter->GetXmlString() );
+		this->_ctx->_docx->StyleSheetXML = m_pXmlWriter->TakeXmlString();
 	}
 
 	/*========================================================================================================*/

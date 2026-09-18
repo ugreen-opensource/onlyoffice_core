@@ -161,6 +161,7 @@ namespace ImageHelper
 		}
 		return result;
 	}
+	
 }
 namespace DocFileFormat
 {

@@ -1310,6 +1310,7 @@ namespace NSFile
 		}
 		return bRes;
 	}
+
 	bool CFileBinary::SaveToFile(const std::wstring&  strFileName, const std::wstring& strXml, bool bIsBOM)
 	{
 		CFileBinary oFile;

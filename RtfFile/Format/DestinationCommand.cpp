@@ -46,7 +46,7 @@
 TextReader::TextReader( std::wstring& sName, bool bErease  ) : m_sName(sName), m_bErease(bErease)
 {
 }
-void TextReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void TextReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	if( true == m_bErease )
 		XmlUtils::replace_all(sText, L";", L"");
@@ -426,7 +426,7 @@ RtfNormalReader::RtfNormalReader( RtfDocument& oDocument, RtfReader& oReader )
 	}
 	m_nCurGroups = 0;
 }
-void RtfNormalReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfNormalReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	oParagraphReaderDestination.ExecuteText( oDocument, oReader, sText );
 }
@@ -705,7 +705,7 @@ bool RtfParagraphReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oRead
 	else
 		return m_oParPropDest.ExecuteCommand(oDocument, oReader, (*this), sCommand, hasParameter, parameter);
 }
-void RtfParagraphReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfParagraphReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	m_oParPropDest.ExecuteText(oDocument, oReader, sText);
 }
@@ -2022,7 +2022,7 @@ bool RtfMathReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, s
 
 	return true;
 }
-void RtfMathReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfMathReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	RtfCharPtr pNewChar ( new RtfChar() );
 	pNewChar->m_oProperty.Merge(m_oCharProp);
@@ -2553,7 +2553,7 @@ bool RtfAnnotElemReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oRead
 		return false;
 	return true;
 }
-void RtfAnnotElemReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfAnnotElemReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	m_oAnnot.m_sValue += sText ;
 }
@@ -2579,7 +2579,7 @@ bool RtfBookmarkStartReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& o
 		return false;
 	return true;
 }
-void RtfBookmarkStartReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfBookmarkStartReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	m_oBookmarkStart.m_sName += sText ;
 }
@@ -2587,13 +2587,13 @@ void RtfBookmarkStartReader::ExecuteText(RtfDocument& oDocument, RtfReader& oRea
 RtfBookmarkEndReader::RtfBookmarkEndReader( RtfBookmarkEnd& oBookmark ):m_oBookmarkEnd(oBookmark)
 {
 }
-void RtfBookmarkEndReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfBookmarkEndReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	m_oBookmarkEnd.m_sName += sText;
 }
 
 RtfFieldInstReader::RtfFieldInstReader( RtfFieldInst& oFieldInst ) :  m_oFieldInst(oFieldInst) {}
-void RtfFieldInstReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText )
+void RtfFieldInstReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText )
 {
 	RtfParagraphPropDestination::ExecuteText(oDocument, oReader, sText);
 }
@@ -2633,7 +2633,7 @@ bool RtfFieldInstReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oRead
 RtfFormFieldReader::RtfFormFieldReader(RtfFormField& oFormField) : m_oFormField(oFormField)
 {
 }
-void RtfFormFieldReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfFormFieldReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	if (is_name == m_eInternalState)			m_oFormField.name += sText;
 	else if (is_deftext == m_eInternalState)	m_oFormField.deftext += sText;
@@ -2700,7 +2700,7 @@ bool RtfOleBinReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader,
 	}
 	return true;
 }
-void RtfOleBinReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfOleBinReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	m_arData.push_back(std::string(sText.begin(), sText.end()));
 }
@@ -2805,11 +2805,17 @@ RtfShapeReader::ShapePropertyReader::ShapePropertyValueReader::ShapePropertyValu
 }
 bool RtfShapeReader::ShapePropertyReader::ShapePropertyValueReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader,  std::string sCommand, bool hasParameter, int parameter)
 {
-	if( "sv" == sCommand )
+	bool isMatchingCommand = ("pict" == sCommand);
+	// if (m_sPropName.size() == 9 && m_sPropName[8] == L'\0') {
+	// 	m_sPropName.resize(8);
+	// }
+	bool isMatchingPropName = (m_sPropName == L"pib" || m_sPropName == L"fillBlip");
+
+	if( "sv" == sCommand)
 		return true;
-	else if( "pict" == sCommand && ( L"pib" == m_sPropName  || L"fillBlip" == m_sPropName))
+	else if(isMatchingCommand && isMatchingPropName)
 	{
-		m_oShape.m_oPicture = RtfPicturePtr ( new RtfPicture() );
+ 		m_oShape.m_oPicture = RtfPicturePtr ( new RtfPicture() );
 		RtfPictureReader oPictureReader( oReader, m_oShape );
 		StartSubReader( oPictureReader, oDocument, oReader );
 	}
@@ -2817,7 +2823,7 @@ bool RtfShapeReader::ShapePropertyReader::ShapePropertyValueReader::ExecuteComma
 		return false;
 	return true;
 }
-void RtfShapeReader::ShapePropertyReader::ShapePropertyValueReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText)
+void RtfShapeReader::ShapePropertyReader::ShapePropertyValueReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText)
 {
 	m_sPropValue += oText;
 }
@@ -3433,7 +3439,7 @@ std::wstring RtfFontTableReader::RemoveLastUnchar(std::wstring str)
 	}
 	return str;
 }
-void RtfFontTableReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfFontTableReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	if( is_panose == m_eInternalState )
 		m_oFont.m_sPanose += sText;
@@ -3516,7 +3522,7 @@ bool RtfColorTableReader::ExecuteCommand( RtfDocument& oDocument, RtfReader& oRe
 	m_bIsSet = true;
 	return true;
 }
-void RtfColorTableReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText )
+void RtfColorTableReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText )
 {
 	//Romanization_Armenian.rtf
 	//{\colortbl\red0\blue159\green82;\red0\blue0\green0;\red255\blue255\green255;\red0\blue156\green90;\red169\blue86\green0;}
@@ -3567,7 +3573,7 @@ bool RtfRevisionTableReader::ExecuteCommand( RtfDocument& oDocument, RtfReader& 
 
 	return true;
 }
-void RtfRevisionTableReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText )
+void RtfRevisionTableReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText )
 {
 	if (std::wstring::npos != sText.find(L";"))
 	{
@@ -3713,7 +3719,7 @@ bool RtfInfoReader::ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader, 
 	return true;
 
 }
-void RtfInfoReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText )
+void RtfInfoReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText )
 {
 	if		( is_title		== m_eInternalState )	oDocument.m_oInformation.m_sTitle		+= sText.c_str();
 	else if	( is_subject	== m_eInternalState )	oDocument.m_oInformation.m_sSubject		+= sText.c_str();
@@ -3913,9 +3919,17 @@ bool RtfPictureReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader
 	}
 	return true;
 }
-void RtfPictureReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfPictureReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
-	m_sData += sText;
+	if (m_sData.empty())
+	{
+		m_sData = std::move(sText);
+	}
+	else
+	{
+		m_sData.reserve(m_sData.size() + sText.size());
+        m_sData += sText;
+	}
 }
 void RtfPictureReader::ExitReader( RtfDocument& oDocument, RtfReader& oReader )
 {
@@ -4054,7 +4068,7 @@ RtfParagraphPropDestination::RtfParagraphPropDestination( )
 	m_oCurParagraph		= RtfParagraphPtr		(new RtfParagraph());
 	m_oTextItems		= TextItemContainerPtr	( new TextItemContainer() );
 }
-void RtfParagraphPropDestination::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfParagraphPropDestination::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	m_bPar = false;
 	RtfCharPtr pNewChar ( new RtfChar() );
@@ -4995,7 +5009,7 @@ bool RtfFootnoteReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oReade
 
 	return true;
 }
-void RtfFootnoteReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText )
+void RtfFootnoteReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText )
 {
 	m_oParPropDest.ExecuteText( oDocument, oReader, sText );
 }
@@ -5042,7 +5056,7 @@ bool RtfAnnotationReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oRea
 		return m_oParPropDest.ExecuteCommand( oDocument, oReader, (*this), sCommand, hasParameter, parameter );
 	return true;
 }
-void RtfAnnotationReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText )
+void RtfAnnotationReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText )
 {
 	m_oParPropDest.ExecuteText( oDocument, oReader, sText );
 }
@@ -5278,7 +5292,7 @@ bool RtfStyleTableReader::RtfStyleReader::ExecuteCommand(RtfDocument& oDocument,
 	return true;
 
 }
-void RtfStyleTableReader::RtfStyleReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
+void RtfStyleTableReader::RtfStyleReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
 {
 	while (true)
 	{

@@ -64,6 +64,7 @@
 
 #include "../../Common/MS-LCID.h"
 #include "../../Common/cfcpp/compoundfile.h"
+#include "../../DesktopEditor/common/Directory.h"
 
 namespace CRYPT
 {
@@ -118,6 +119,12 @@ namespace DocFileFormat
 		{
 			return WordDocumentStream;
 		}
+
+		inline std::wstring GetTempMediaDir()
+		{
+			NSDirectory::CreateDirectory(m_sTempMediaFolder);
+			return	m_sTempMediaFolder;
+		}
 	private:
 		bool LoadDocumentFlat();
 
@@ -163,6 +170,7 @@ namespace DocFileFormat
 		std::wstring			m_sPassword;
 		std::wstring			m_sTempFolder;
 		std::wstring			m_sTempDecryptFileName;
+		std::wstring			m_sTempMediaFolder;
 		int						m_nUserLCID;
 		std::wstring			m_sXmlApp;
 		std::wstring			m_sXmlCore;

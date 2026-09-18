@@ -136,8 +136,7 @@ namespace DocFileFormat
 				m_pXmlWriter->WriteNodeEnd(L"w:comment" );
 			}
 			m_pXmlWriter->WriteNodeEnd( L"w:comments" );
-			m_context->_docx->CommentsXML = std::wstring(m_pXmlWriter->GetXmlString());
-
+			m_context->_docx->CommentsXML = m_pXmlWriter->TakeXmlString();
 			m_pXmlWriter->Clear();
 
 			if (false == arrParaId.empty() && (m_document->AnnotationsReferencesEx) && (false == m_document->AnnotationsReferencesEx->m_ReferencesEx.empty()))
@@ -190,7 +189,7 @@ namespace DocFileFormat
 					m_pXmlWriter->WriteNodeEnd(L"w15:commentEx" );
 				}
 				m_pXmlWriter->WriteNodeEnd( L"w15:commentsEx" );
-				m_context->_docx->CommentsExtendedXML = std::wstring(m_pXmlWriter->GetXmlString());
+				m_context->_docx->CommentsExtendedXML = m_pXmlWriter->TakeXmlString();
 			}
 		}
 	}

@@ -301,6 +301,7 @@ namespace NSUnicodeConverter
 							if (U_SUCCESS(status))
 							{
 								sRes.resize((size_t)nResLen);
+
 							}
 							else
 							{
@@ -506,5 +507,4 @@ namespace NSUnicodeConverter
 		g_overrideIcuDataPath = internal.GetUtf8StringFromUnicode(sDirectory.c_str(), sDirectory.length());
 		u_setDataDirectory(g_overrideIcuDataPath.c_str());
 	}
-
 }
