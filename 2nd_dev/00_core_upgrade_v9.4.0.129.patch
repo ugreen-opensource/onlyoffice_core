@@ -1,0 +1,1797 @@
+diff --git a/Common/OfficeFileFormatChecker2.cpp b/Common/OfficeFileFormatChecker2.cpp
+index 4a1c7d51da..3cb93b7a94 100644
+--- a/Common/OfficeFileFormatChecker2.cpp
++++ b/Common/OfficeFileFormatChecker2.cpp
+@@ -787,7 +787,8 @@ bool COfficeFileFormatChecker::isOfficeFile(const std::wstring &_fileName)
+ 	file.ReadFile(bufferDetect, MIN_SIZE_BUFFER, dwDetectdBytes);
+ 
+ 	COfficeUtils OfficeUtils(NULL);
+-	if (OfficeUtils.IsArchive(fileName) == S_OK && (false == isPdfFormatFile(bufferDetect, dwDetectdBytes, sDocumentID)))
++	bool isZip = (S_OK == OfficeUtils.IsArchive(fileName));
++	if (isZip && (false == isPdfFormatFile(bufferDetect, dwDetectdBytes, sDocumentID)))
+ 	{
+ 		if (isOOXFormatFile(fileName))
+         {
+@@ -839,6 +840,10 @@ bool COfficeFileFormatChecker::isOfficeFile(const std::wstring &_fileName)
+ 			return true;
+ 		}
+ 	}
++	else if (!isZip && S_OK == OfficeUtils.IsZipSignature(fileName)) // distinguish corrupted zip from non-zip
++	{
++		isZip = true;
++	}
+ 
+ 	//-----------------------------------------------------------------------------------------------
+ 	// others
+@@ -975,7 +980,7 @@ bool COfficeFileFormatChecker::isOfficeFile(const std::wstring &_fileName)
+ 	else if (0 == sExt.compare(L".scsv"))
+ 		nFileType = AVS_OFFICESTUDIO_FILE_SPREADSHEET_SCSV;	
+ 	else if (0 == sExt.compare(L".csv") || 0 == sExt.compare(L".tsv") || 0 == sExt.compare(L".dsv") || 0 == sExt.compare(L".cssv")
+-		|| 0 == sExt.compare(L".xls") || 0 == sExt.compare(L".xlsx") || 0 == sExt.compare(L".xlsb"))
++		|| 0 == sExt.compare(L".xls") || (0 == sExt.compare(L".xlsx") && !isZip) || 0 == sExt.compare(L".xlsb"))
+ 		nFileType = AVS_OFFICESTUDIO_FILE_SPREADSHEET_CSV;
+ 	else if (0 == sExt.compare(L".html") || 0 == sExt.compare(L".htm"))
+ 		nFileType = AVS_OFFICESTUDIO_FILE_DOCUMENT_HTML;
+@@ -983,7 +988,7 @@ bool COfficeFileFormatChecker::isOfficeFile(const std::wstring &_fileName)
+ 		nFileType = AVS_OFFICESTUDIO_FILE_CANVAS_PDF;
+ 	else if (0 == sExt.compare(L".doct")) // case of archive with html viewer
+ 		nFileType = AVS_OFFICESTUDIO_FILE_TEAMLAB_DOCY;
+-	else if (0 == sExt.compare(L".txt") || 0 == sExt.compare(L".xml") || 0 == sExt.compare(L".rtf")	|| 0 == sExt.compare(L".doc") || 0 == sExt.compare(L".docx"))
++	else if (0 == sExt.compare(L".txt") || 0 == sExt.compare(L".xml") || 0 == sExt.compare(L".rtf")	|| 0 == sExt.compare(L".doc") || (0 == sExt.compare(L".docx") && !isZip))
+ 		nFileType = AVS_OFFICESTUDIO_FILE_DOCUMENT_TXT;
+ 	else if (0 == sExt.compare(L".pages"))
+ 		nFileType = AVS_OFFICESTUDIO_FILE_DOCUMENT_PAGES;
+diff --git a/DesktopEditor/common/File.cpp b/DesktopEditor/common/File.cpp
+index f93fa6f604..b4f58d7093 100644
+--- a/DesktopEditor/common/File.cpp
++++ b/DesktopEditor/common/File.cpp
+@@ -1310,6 +1310,7 @@ namespace NSFile
+ 		}
+ 		return bRes;
+ 	}
++
+ 	bool CFileBinary::SaveToFile(const std::wstring&  strFileName, const std::wstring& strXml, bool bIsBOM)
+ 	{
+ 		CFileBinary oFile;
+diff --git a/MsBinaryFile/Common/Base/XmlTools.cpp b/MsBinaryFile/Common/Base/XmlTools.cpp
+index 0281574b50..517cbd984f 100644
+--- a/MsBinaryFile/Common/Base/XmlTools.cpp
++++ b/MsBinaryFile/Common/Base/XmlTools.cpp
+@@ -311,6 +311,11 @@ namespace XMLTools
+ 	{
+ 		return m_str;
+ 	}
++
++	std::wstring CStringXmlWriter::TakeXmlString()
++	{
++		return std::move(m_str);
++	}
+ 	void CStringXmlWriter::SetXmlString(const std::wstring& strValue)
+ 	{
+ 		m_str = strValue;
+diff --git a/MsBinaryFile/Common/Base/XmlTools.h b/MsBinaryFile/Common/Base/XmlTools.h
+index c906cbaafb..10c91d759e 100644
+--- a/MsBinaryFile/Common/Base/XmlTools.h
++++ b/MsBinaryFile/Common/Base/XmlTools.h
+@@ -158,6 +158,7 @@ namespace XMLTools
+ 	public:
+ 		CStringXmlWriter();
+ 		std::wstring GetXmlString();
++		std::wstring TakeXmlString();
+ 
+ 		void SetXmlString(const std::wstring& strValue);
+ 		void Clear();
+diff --git a/MsBinaryFile/DocFile/CommentsMapping.cpp b/MsBinaryFile/DocFile/CommentsMapping.cpp
+index 160c67fab4..c3d7cb846a 100644
+--- a/MsBinaryFile/DocFile/CommentsMapping.cpp
++++ b/MsBinaryFile/DocFile/CommentsMapping.cpp
+@@ -136,8 +136,7 @@ namespace DocFileFormat
+ 				m_pXmlWriter->WriteNodeEnd(L"w:comment" );
+ 			}
+ 			m_pXmlWriter->WriteNodeEnd( L"w:comments" );
+-			m_context->_docx->CommentsXML = std::wstring(m_pXmlWriter->GetXmlString());
+-
++			m_context->_docx->CommentsXML = m_pXmlWriter->TakeXmlString();
+ 			m_pXmlWriter->Clear();
+ 
+ 			if (false == arrParaId.empty() && (m_document->AnnotationsReferencesEx) && (false == m_document->AnnotationsReferencesEx->m_ReferencesEx.empty()))
+@@ -190,7 +189,7 @@ namespace DocFileFormat
+ 					m_pXmlWriter->WriteNodeEnd(L"w15:commentEx" );
+ 				}
+ 				m_pXmlWriter->WriteNodeEnd( L"w15:commentsEx" );
+-				m_context->_docx->CommentsExtendedXML = std::wstring(m_pXmlWriter->GetXmlString());
++				m_context->_docx->CommentsExtendedXML = m_pXmlWriter->TakeXmlString();
+ 			}
+ 		}
+ 	}
+diff --git a/MsBinaryFile/DocFile/EndnotesMapping.cpp b/MsBinaryFile/DocFile/EndnotesMapping.cpp
+index 1b85036ade..3cf490ed14 100644
+--- a/MsBinaryFile/DocFile/EndnotesMapping.cpp
++++ b/MsBinaryFile/DocFile/EndnotesMapping.cpp
+@@ -98,7 +98,7 @@ namespace DocFileFormat
+ 
+ 			m_pXmlWriter->WriteNodeEnd( L"w:endnotes");
+ 
+-			m_context->_docx->EndnotesXML = std::wstring( m_pXmlWriter->GetXmlString() );
++			m_context->_docx->EndnotesXML = m_pXmlWriter->TakeXmlString();
+ 		}
+ 	}
+ }
+diff --git a/MsBinaryFile/DocFile/FontTableMapping.cpp b/MsBinaryFile/DocFile/FontTableMapping.cpp
+index efcabe94b8..5b5bbd386d 100644
+--- a/MsBinaryFile/DocFile/FontTableMapping.cpp
++++ b/MsBinaryFile/DocFile/FontTableMapping.cpp
+@@ -140,6 +140,6 @@ namespace DocFileFormat
+ 
+         m_pXmlWriter->WriteNodeEnd( L"w:fonts");
+ 
+-		_ctx->_docx->FontTableXML = m_pXmlWriter->GetXmlString() ;
++		_ctx->_docx->FontTableXML = m_pXmlWriter->TakeXmlString() ;
+ 	}
+ }
+diff --git a/MsBinaryFile/DocFile/FootnotesMapping.cpp b/MsBinaryFile/DocFile/FootnotesMapping.cpp
+index 3b784b469a..307a8d8cf6 100644
+--- a/MsBinaryFile/DocFile/FootnotesMapping.cpp
++++ b/MsBinaryFile/DocFile/FootnotesMapping.cpp
+@@ -130,6 +130,6 @@ namespace DocFileFormat
+ 
+ 			m_pXmlWriter->WriteNodeEnd( L"w:footnotes");
+ 
+-			m_context->_docx->FootnotesXML = std::wstring(m_pXmlWriter->GetXmlString());
++			m_context->_docx->FootnotesXML = m_pXmlWriter->TakeXmlString();
+ 	}
+ }
+diff --git a/MsBinaryFile/DocFile/MainDocumentMapping.cpp b/MsBinaryFile/DocFile/MainDocumentMapping.cpp
+index 5fbd47f365..aa9e7ad477 100644
+--- a/MsBinaryFile/DocFile/MainDocumentMapping.cpp
++++ b/MsBinaryFile/DocFile/MainDocumentMapping.cpp
+@@ -192,6 +192,6 @@ namespace DocFileFormat
+ 		m_pXmlWriter->WriteNodeEnd( L"w:body" );
+ 		m_pXmlWriter->WriteNodeEnd( L"w:document" );
+ 
+-		m_context->_docx->DocumentXML = std::wstring(m_pXmlWriter->GetXmlString());
++		m_context->_docx->DocumentXML = m_pXmlWriter->TakeXmlString();
+ 	}
+ }
+\ No newline at end of file
+diff --git a/MsBinaryFile/DocFile/NumberingMapping.cpp b/MsBinaryFile/DocFile/NumberingMapping.cpp
+index 3683571268..ef9d924fdf 100644
+--- a/MsBinaryFile/DocFile/NumberingMapping.cpp
++++ b/MsBinaryFile/DocFile/NumberingMapping.cpp
+@@ -221,7 +221,7 @@ namespace DocFileFormat
+ 
+             m_pXmlWriter->WriteNodeEnd(L"w:numbering");
+ 
+-			m_xmldocument->NumberingXML = std::wstring(m_pXmlWriter->GetXmlString());
++			m_xmldocument->NumberingXML = m_pXmlWriter->TakeXmlString();
+ 		}
+ 	}
+ 
+diff --git a/MsBinaryFile/DocFile/OfficeDrawing/MetafilePictBlip.cpp b/MsBinaryFile/DocFile/OfficeDrawing/MetafilePictBlip.cpp
+index ecdbe5c097..c73f162c59 100644
+--- a/MsBinaryFile/DocFile/OfficeDrawing/MetafilePictBlip.cpp
++++ b/MsBinaryFile/DocFile/OfficeDrawing/MetafilePictBlip.cpp
+@@ -179,6 +179,20 @@ namespace DocFileFormat
+ 
+ 		return sz;
+ 	}
++	void CMetaFileBuffer::ToFile(std::wstring& fileName)
++	{
++		NSFile::CFileBinary file;
++		if (file.CreateFileW(fileName))
++		{
++			if (NULL != m_pMetaHeader)
++				file.WriteFile( (BYTE*)m_pMetaHeader, m_lMetaHeaderSize);
++			if (NULL != m_pMetaFile)
++				file.WriteFile( (BYTE*)m_pMetaFile, m_lMetaFileSize);
++
++			file.CloseFile();
++		}
++	}
++
+ 	void CMetaFileBuffer::ToFile(NSFile::CFileBinary* pFile)
+ 	{
+ 		if (NULL != m_pMetaHeader)
+diff --git a/MsBinaryFile/DocFile/OfficeDrawing/MetafilePictBlip.h b/MsBinaryFile/DocFile/OfficeDrawing/MetafilePictBlip.h
+index 3e3edba3a4..8e8cae0c72 100644
+--- a/MsBinaryFile/DocFile/OfficeDrawing/MetafilePictBlip.h
++++ b/MsBinaryFile/DocFile/OfficeDrawing/MetafilePictBlip.h
+@@ -98,6 +98,7 @@ public:
+ 
+ 	int ToBuffer(BYTE *& Data);
+ 	void ToFile(NSFile::CFileBinary* pFile);
++	void ToFile(std::wstring& fileName);
+ 	bool isWMV();
+ };
+ 
+diff --git a/MsBinaryFile/DocFile/OpenXmlPackage.h b/MsBinaryFile/DocFile/OpenXmlPackage.h
+index 47696dc6ae..1522e654ac 100644
+--- a/MsBinaryFile/DocFile/OpenXmlPackage.h
++++ b/MsBinaryFile/DocFile/OpenXmlPackage.h
+@@ -88,19 +88,67 @@ namespace DocFileFormat
+ 
+ 	struct ImageFileStructure
+ 	{
+-		ImageFileStructure(const std::wstring& _ext, boost::shared_array<unsigned char> _data, unsigned int _size, Global::BlipType _blipType = Global::msoblipUNKNOWN) : ext(_ext), data(_data), size(_size), blipType(_blipType)
++		ImageFileStructure(const std::wstring& tmpPathFileName)
++		:pathFileName(tmpPathFileName), size(0), blipType(Global::msoblipUNKNOWN)
+ 		{
++			size_t pos = tmpPathFileName.find_last_of(L'.');
++			size_t sep = tmpPathFileName.find_last_of(L"/\\");
++			if (pos != std::wstring::npos && (sep == std::wstring::npos || pos > sep))
++				ext = tmpPathFileName.substr(pos);
++		}
+ 
++		ImageFileStructure(const std::wstring& _ext, boost::shared_array<unsigned char> _data, 
++			unsigned int _size, std::wstring& _cacheDir, int _index,
++			 Global::BlipType _blipType = Global::msoblipUNKNOWN) 
++			 : ext(_ext), size(_size), blipType(_blipType)
++		{
++			std::wstring tmpPathFileName = SaveToFile(_cacheDir, _index, _data.get(), _size);
++			if (!tmpPathFileName.empty())	
++			{
++				pathFileName = tmpPathFileName;
++				return;
++			}
++			data = _data;
+ 		}
+-		ImageFileStructure(const std::wstring& _ext, unsigned char* _data, unsigned int _size, Global::BlipType _blipType = Global::msoblipUNKNOWN) : ext(_ext), size(_size), blipType(_blipType)
++
++		ImageFileStructure(const std::wstring& _ext, unsigned char* _data, unsigned int _size,
++			std::wstring& _cacheDir, int _index, Global::BlipType _blipType = Global::msoblipUNKNOWN)
++			: ext(_ext), size(_size), blipType(_blipType)
+ 		{
++			std::wstring tmpPathFileName = SaveToFile(_cacheDir, _index, _data, _size);
++			if (!tmpPathFileName.empty())	
++			{
++				pathFileName = tmpPathFileName;
++				return;
++			}
+ 			data = boost::shared_array<unsigned char>(new unsigned char[size]);
+ 			memcpy(data.get(), _data, size);
+ 		}
++
++
++		std::wstring SaveToFile( const std::wstring& _cacheDir,int _index, const void* buf, unsigned int size )
++		{
++			if (!_cacheDir.empty() && buf != NULL)
++			{
++				std::wstring strIndex = FormatUtils::SizeTToWideString(_index);
++				std::wstring tmpPathFileName = _cacheDir + FILE_SEPARATOR_STR + std::wstring(L"image") + strIndex + ext;
++				
++				NSFile::CFileBinary file;
++				if (file.CreateFileW(tmpPathFileName))
++				{
++					file.WriteFile( (BYTE*)buf, size);
++					file.CloseFile();
++					return tmpPathFileName;
++				}
++			}
++			return L"";
++		}
++
+ 		std::wstring						ext;
+ 		boost::shared_array<unsigned char>	data;
+ 		unsigned int						size;
+-		Global::BlipType					blipType;	
++		Global::BlipType					blipType;
++		std::wstring 						pathFileName;
+ 	};
+ 
+ 	struct OleObjectFileStructure
+diff --git a/MsBinaryFile/DocFile/PictureDescriptor.cpp b/MsBinaryFile/DocFile/PictureDescriptor.cpp
+index 6e939855eb..dfc1d5f36b 100644
+--- a/MsBinaryFile/DocFile/PictureDescriptor.cpp
++++ b/MsBinaryFile/DocFile/PictureDescriptor.cpp
+@@ -161,6 +161,7 @@ namespace ImageHelper
+ 		}
+ 		return result;
+ 	}
++	
+ }
+ namespace DocFileFormat
+ {
+diff --git a/MsBinaryFile/DocFile/SettingsMapping.cpp b/MsBinaryFile/DocFile/SettingsMapping.cpp
+index 0ef3610121..c1e431a3a7 100644
+--- a/MsBinaryFile/DocFile/SettingsMapping.cpp
++++ b/MsBinaryFile/DocFile/SettingsMapping.cpp
+@@ -283,7 +283,7 @@ namespace DocFileFormat
+ 		//close w:settings
+ 		m_oXmlWriter.WriteNodeEnd( L"w:settings" );
+ 
+-		this->_ctx->_docx->SettingsXML = std::wstring( m_oXmlWriter.GetXmlString() ); 
++		this->_ctx->_docx->SettingsXML = m_oXmlWriter.TakeXmlString(); 
+ 	}
+ 
+ 	void SettingsMapping::writeRsidList()
+diff --git a/MsBinaryFile/DocFile/StyleSheetMapping.cpp b/MsBinaryFile/DocFile/StyleSheetMapping.cpp
+index ed388b1eee..4bd56a0a4b 100644
+--- a/MsBinaryFile/DocFile/StyleSheetMapping.cpp
++++ b/MsBinaryFile/DocFile/StyleSheetMapping.cpp
+@@ -233,7 +233,7 @@ namespace DocFileFormat
+ 
+         m_pXmlWriter->WriteNodeEnd( L"w:styles" );
+ 
+-		this->_ctx->_docx->StyleSheetXML = std::wstring( m_pXmlWriter->GetXmlString() );
++		this->_ctx->_docx->StyleSheetXML = m_pXmlWriter->TakeXmlString();
+ 	}
+ 
+ 	/*========================================================================================================*/
+diff --git a/MsBinaryFile/DocFile/VMLPictureMapping.cpp b/MsBinaryFile/DocFile/VMLPictureMapping.cpp
+index e3a658c27f..fafca2aa84 100644
+--- a/MsBinaryFile/DocFile/VMLPictureMapping.cpp
++++ b/MsBinaryFile/DocFile/VMLPictureMapping.cpp
+@@ -48,7 +48,7 @@
+ 
+ #include "../../OOXML/DocxFormat/Math/oMathPara.h"
+ #include "../../OOXML/DocxFormat/Logic/Paragraph.h"
+-
++#include "../Common/Base/FormatUtils.h"
+ using namespace DocFileFormat;
+ 
+ 
+@@ -577,6 +577,8 @@ namespace DocFileFormat
+ 		bool result = false;
+ 
+ 		BlipStoreEntry* pBlipEntry = pict->blipStoreEntry;
++		std::wstring cacheDir = m_context->_doc->GetTempMediaDir();
++		std::wstring strIndex = FormatUtils::SizeTToWideString(m_context->_docx->ImagesList.size() + 1);
+ 
+ 		if (pict->embeddedData && pict->embeddedDataSize > 0)
+ 		{
+@@ -611,7 +613,8 @@ namespace DocFileFormat
+ 			}
+ 
+ 			m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(btWin32),
+-				pict->embeddedData, pict->embeddedDataSize, btWin32));
++				pict->embeddedData, pict->embeddedDataSize,cacheDir, 
++				m_context->_docx->ImagesList.size() + 1, btWin32));
+ 
+ 			m_nImageId = m_context->_docx->RegisterImage(m_caller, btWin32);
+ 			result = true;
+@@ -626,12 +629,12 @@ namespace DocFileFormat
+ 				MetafilePictBlip* metaBlip = static_cast<MetafilePictBlip*>(pBlipEntry->Blip);
+ 				if (metaBlip)
+ 				{//decompress inside MetafilePictBlip
+-					unsigned char* newData = NULL;
+-					unsigned int newDataSize = metaBlip->oMetaFile.ToBuffer(newData);
+-
+-					boost::shared_array<unsigned char> arData(newData);
+-					m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(pBlipEntry->btWin32), arData, newDataSize));
++					
++					std::wstring tmpFile = cacheDir + FILE_SEPARATOR_STR + std::wstring(L"image") + strIndex + GetTargetExt(pBlipEntry->btWin32);
++					metaBlip->oMetaFile.ToFile(tmpFile);
++					m_context->_docx->ImagesList.push_back(ImageFileStructure(tmpFile));
+ 				}
++				
+ 			}break;
+ 			case Global::msoblipDIB:
+ 			{//user_manual_v52.doc
+@@ -639,17 +642,9 @@ namespace DocFileFormat
+ 				BitmapBlip* bitBlip = static_cast<BitmapBlip*>(pBlipEntry->Blip);
+ 				if (bitBlip)
+ 				{
+-					std::wstring file_name = m_context->_doc->m_sTempFolder + FILE_SEPARATOR_STR + L"tmp_image";
+-					pBlipEntry->btWin32 = ImageHelper::SaveImageToFileFromDIB(bitBlip->m_pvBits, bitBlip->pvBitsSize, file_name);
+-
+-					unsigned char* pData = NULL;
+-					DWORD nData = 0;
+-					if (NSFile::CFileBinary::ReadAllBytes(file_name, &pData, nData))
+-					{
+-						m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(pBlipEntry->btWin32),
+-							boost::shared_array<unsigned char>(pData), nData, pBlipEntry->btWin32));
+-					}
+-					NSFile::CFileBinary::Remove(file_name);
++					std::wstring tmpFile = cacheDir + FILE_SEPARATOR_STR + std::wstring(L"image") + strIndex;
++					pBlipEntry->btWin32 = ImageHelper::SaveImageToFileFromDIB(bitBlip->m_pvBits, bitBlip->pvBitsSize, tmpFile);
++					m_context->_docx->ImagesList.push_back(ImageFileStructure(tmpFile));
+ 				}
+ 			}break;
+ 			case Global::msoblipPICT:
+@@ -663,25 +658,17 @@ namespace DocFileFormat
+ 					CBgraFrame bgraFrame;
+ 					if (bgraFrame.Decode(newData, newDataSize))
+ 					{
+-						std::wstring file_name = m_context->_doc->m_sTempFolder + FILE_SEPARATOR_STR + L"tmp_image";
+-						bgraFrame.SaveFile(file_name, 4); // png
+-
+-						unsigned char* pData = NULL;
+-						DWORD nData = 0;
+-						if (NSFile::CFileBinary::ReadAllBytes(file_name, &pData, nData))
+-						{
+-							pBlipEntry->btWin32 = Global::msoblipPNG;
+-
+-							m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(pBlipEntry->btWin32),
+-								boost::shared_array<unsigned char>(pData), nData, pBlipEntry->btWin32));
+-						}
+-						NSFile::CFileBinary::Remove(file_name);
++						pBlipEntry->btWin32 = Global::msoblipPNG;
++						std::wstring tmpFile = cacheDir + FILE_SEPARATOR_STR + std::wstring(L"image") + strIndex + GetTargetExt(pBlipEntry->btWin32);
++						if (bgraFrame.SaveFile(tmpFile, 4)) // png
++							m_context->_docx->ImagesList.push_back(ImageFileStructure(tmpFile));
+ 					}
+ 					else
+ 					{
+ 						m_context->_docx->ImagesList.push_back(ImageFileStructure(metaBlip->oMetaFile.m_sExtension,
+-							newData, newDataSize, pBlipEntry->btWin32));
++							newData, newDataSize, cacheDir, m_context->_docx->ImagesList.size() + 1,pBlipEntry->btWin32));
+ 					}
++					RELEASEARRAYOBJECTS(newData);
+ 				}
+ 			}break;
+ 			case Global::msoblipJPEG:
+@@ -693,7 +680,7 @@ namespace DocFileFormat
+ 				if (bitBlip)
+ 				{
+ 					m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(pBlipEntry->btWin32),
+-						bitBlip->m_pvBits, bitBlip->pvBitsSize, pBlipEntry->btWin32));
++						bitBlip->m_pvBits, bitBlip->pvBitsSize, cacheDir, m_context->_docx->ImagesList.size() + 1, pBlipEntry->btWin32));
+ 				}
+ 			}break;
+ 
+diff --git a/MsBinaryFile/DocFile/VMLPictureMapping.h b/MsBinaryFile/DocFile/VMLPictureMapping.h
+index 49424124e1..ba63d41a02 100644
+--- a/MsBinaryFile/DocFile/VMLPictureMapping.h
++++ b/MsBinaryFile/DocFile/VMLPictureMapping.h
+@@ -72,7 +72,7 @@ namespace DocFileFormat
+ 
+ 		static std::wstring GetTargetExt (Global::BlipType nType);
+ 		static std::wstring GetContentType (Global::BlipType nType);
+-
++		
+ 		bool m_isBlob = false;
+ 		bool m_isBullete = false;
+ 		bool m_isEquation = false;
+diff --git a/MsBinaryFile/DocFile/VMLShapeMapping.cpp b/MsBinaryFile/DocFile/VMLShapeMapping.cpp
+index bce9af28f6..59dbec1839 100644
+--- a/MsBinaryFile/DocFile/VMLShapeMapping.cpp
++++ b/MsBinaryFile/DocFile/VMLShapeMapping.cpp
+@@ -1529,8 +1529,9 @@ namespace DocFileFormat
+ 	bool VMLShapeMapping::copyPicture(BlipStoreEntry* oBlip)
+ 	{
+ 		bool result = false;
+-
++		std::wstring cacheDir = m_context->_doc->GetTempMediaDir();
+ 		//write the blip
++		
+ 		if (oBlip)
+ 		{
+ 			VirtualStreamReader reader(m_context->_doc->WordDocumentStream, oBlip->foDelay, m_context->_doc->nWordVersion);
+@@ -1554,7 +1555,8 @@ namespace DocFileFormat
+ 						if (0 != decompressedSize && NULL != decompressed)
+ 						{
+ 							boost::shared_array<unsigned char> arDecompressed(decompressed);
+-							m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(oBlip->btWin32), arDecompressed, decompressedSize));
++							m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(oBlip->btWin32), arDecompressed,
++							 decompressedSize, cacheDir, m_context->_docx->ImagesList.size() + 1));
+ 							result = true;	
+ 						}
+ 						RELEASEOBJECT(metaBlip);
+@@ -1571,22 +1573,17 @@ namespace DocFileFormat
+ 					{
+ 						if (oBlip->btWin32 == Global::msoblipDIB)
+ 						{
+-							std::wstring file_name = m_context->_doc->m_sTempFolder + FILE_SEPARATOR_STR + L"tmp_image";
+-
+-							oBlip->btWin32 = ImageHelper::SaveImageToFileFromDIB(bitBlip->m_pvBits, bitBlip->pvBitsSize, file_name);
+-							
+-							unsigned char* pData = NULL;
+-							DWORD nData = 0;
+-							if (NSFile::CFileBinary::ReadAllBytes(file_name, &pData, nData))
+-							{
+-								m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(oBlip->btWin32), 
+-									boost::shared_array<unsigned char>(pData), nData, oBlip->btWin32));
+-								result = true;	
+-								break;
+-							}//in case of conversion error - keep original dib
++							std::wstring strIndex = FormatUtils::SizeTToWideString(m_context->_docx->ImagesList.size() + 1);
++							std::wstring tmpFile = cacheDir + FILE_SEPARATOR_STR + std::wstring(L"image") + strIndex;
++							oBlip->btWin32 = ImageHelper::SaveImageToFileFromDIB(bitBlip->m_pvBits, bitBlip->pvBitsSize, tmpFile);
++							m_context->_docx->ImagesList.push_back(ImageFileStructure(tmpFile));
++						}
++						else
++						{
++							m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(oBlip->btWin32),
++							bitBlip->m_pvBits, bitBlip->pvBitsSize, cacheDir,
++							m_context->_docx->ImagesList.size() + 1, oBlip->btWin32));
+ 						}
+-						m_context->_docx->ImagesList.push_back(ImageFileStructure(GetTargetExt(oBlip->btWin32), 
+-							bitBlip->m_pvBits, bitBlip->pvBitsSize, oBlip->btWin32));
+ 						RELEASEOBJECT (bitBlip);
+ 						result = true;
+ 					}break;
+diff --git a/MsBinaryFile/DocFile/WordDocument.cpp b/MsBinaryFile/DocFile/WordDocument.cpp
+index 9f6e6a6e9d..ce8044cb94 100644
+--- a/MsBinaryFile/DocFile/WordDocument.cpp
++++ b/MsBinaryFile/DocFile/WordDocument.cpp
+@@ -106,6 +106,11 @@ namespace DocFileFormat
+ 		nDocumentCodePage	= ENCODING_WINDOWS_1250;
+ 		nFontsCodePage		= ENCODING_WINDOWS_1250;
+ 		nDocumentCodePageInfo = 0;
++
++		if (!m_sTempFolder.empty())
++		{
++			m_sTempMediaFolder =  m_sTempFolder + FILE_SEPARATOR_STR + std::wstring(L"ugreen-media");
++		}
+ 	}
+ 
+ 	WordDocument::~WordDocument()
+@@ -610,7 +615,7 @@ namespace DocFileFormat
+             m_sTempFolder = NSFile::CFileBinary::GetTempPath();
+ 		}
+ 		m_sTempDecryptFileName	= m_sTempFolder + FILE_SEPARATOR_STR + L"~tempFile.doc";
+-		
++		m_sTempMediaFolder =  m_sTempFolder + FILE_SEPARATOR_STR + L"ugreen-media";
+ 		POLE::Storage *storageOut	= new POLE::Storage(m_sTempDecryptFileName.c_str());
+ 
+ 		if (!storageOut)
+@@ -659,7 +664,7 @@ namespace DocFileFormat
+             m_sTempFolder = NSFile::CFileBinary::GetTempPath();
+ 		}
+ 		m_sTempDecryptFileName	= m_sTempFolder + FILE_SEPARATOR_STR + L"~tempFile.doc";
+-		
++		m_sTempMediaFolder =  m_sTempFolder + FILE_SEPARATOR_STR + L"ugreen-media";
+ 		POLE::Storage *storageIn = m_pStorage->GetStorage();
+ 		CFCPP::CompoundFile* storageOut = new CFCPP::CompoundFile(CFCPP::Ver_3, CFCPP::Default);
+ 
+@@ -1221,5 +1226,4 @@ namespace DocFileFormat
+ 		//	}
+ 		//}
+ 	}
+-
+ }
+diff --git a/MsBinaryFile/DocFile/WordDocument.h b/MsBinaryFile/DocFile/WordDocument.h
+index a64a1daf49..e58b68935e 100644
+--- a/MsBinaryFile/DocFile/WordDocument.h
++++ b/MsBinaryFile/DocFile/WordDocument.h
+@@ -64,6 +64,7 @@
+ 
+ #include "../../Common/MS-LCID.h"
+ #include "../../Common/cfcpp/compoundfile.h"
++#include "../../DesktopEditor/common/Directory.h"
+ 
+ namespace CRYPT
+ {
+@@ -118,6 +119,12 @@ namespace DocFileFormat
+ 		{
+ 			return WordDocumentStream;
+ 		}
++
++		inline std::wstring GetTempMediaDir()
++		{
++			NSDirectory::CreateDirectory(m_sTempMediaFolder);
++			return	m_sTempMediaFolder;
++		}
+ 	private:
+ 		bool LoadDocumentFlat();
+ 
+@@ -163,6 +170,7 @@ namespace DocFileFormat
+ 		std::wstring			m_sPassword;
+ 		std::wstring			m_sTempFolder;
+ 		std::wstring			m_sTempDecryptFileName;
++		std::wstring			m_sTempMediaFolder;
+ 		int						m_nUserLCID;
+ 		std::wstring			m_sXmlApp;
+ 		std::wstring			m_sXmlCore;
+diff --git a/MsBinaryFile/DocFile/WordprocessingDocument.cpp b/MsBinaryFile/DocFile/WordprocessingDocument.cpp
+index 9ce462cdc4..df4d30f729 100644
+--- a/MsBinaryFile/DocFile/WordprocessingDocument.cpp
++++ b/MsBinaryFile/DocFile/WordprocessingDocument.cpp
+@@ -155,10 +155,28 @@ namespace DocFileFormat
+ 
+ 			int i = 1;
+ 
++			std::wstring tmpDir;
+ 			for (std::list<ImageFileStructure>::iterator iter = ImagesList.begin(); iter != ImagesList.end(); ++iter)
+ 			{
+-				SaveToFile(pathMedia, std::wstring(L"image" ) + FormatUtils::IntToWideString(i++) + iter->ext, (void*)iter->data.get(), iter->size);
++				std::wstring pathFileName =  std::wstring(L"image" ) + FormatUtils::IntToWideString(i++) + iter->ext;
++				if (!iter->pathFileName.empty() && nullptr == iter->data.get())
++				{
++					if (tmpDir.empty())
++					{
++						size_t found = iter->pathFileName.find_last_of(L"/\\");
++						if (found != std::wstring::npos) {
++							tmpDir =  iter->pathFileName.substr(0, found);
++						}
++					}
++					std::wstring mediaPathFileName = pathMedia + FILE_SEPARATOR_STR + pathFileName;
++					NSFile::CFileBinary::Move(iter->pathFileName.c_str(), mediaPathFileName.c_str());
++				}	
++				else
++					SaveToFile(pathMedia, pathFileName, (void*)iter->data.get(), iter->size);
+ 			}
++
++			
++			NSDirectory::DeleteDirectory(tmpDir);
+ 		}
+ 
+ 		if (!OleObjectsList.empty())
+diff --git a/OfficeUtils/src/OfficeUtils.cpp b/OfficeUtils/src/OfficeUtils.cpp
+index 65442107e3..62c95ace6b 100644
+--- a/OfficeUtils/src/OfficeUtils.cpp
++++ b/OfficeUtils/src/OfficeUtils.cpp
+@@ -274,6 +274,34 @@ HRESULT COfficeUtils::GetFilesSize(const std::wstring& _zipFile, const std::wstr
+ 	}
+ }
+ 
++HRESULT COfficeUtils::IsZipSignature(const std::wstring& filename)
++{
++	NSFile::CFileBinary file;
++	if (!file.OpenFile(filename))
++		return S_FALSE;
++
++	BYTE header[4] = {0};
++	DWORD read_bytes = 0;
++	file.ReadFile(header, 4, read_bytes);
++	file.CloseFile();
++
++	if (read_bytes != 4 || header[0] != 0x50 || header[1] != 0x4B)
++		return S_FALSE;
++
++	unsigned short signature_type = (unsigned short)((header[3] << 8) | header[2]);
++	switch (signature_type)
++	{
++	case 0x0403: // Local file header
++	case 0x0504: // Central directory file header
++	case 0x0605: // End of central directory record
++	case 0x0708: // Split archive
++	case 0x0809: // Spanned archive
++		return S_OK;
++	default:
++		return S_FALSE;
++	}
++}
++
+ int COfficeUtils::GetAddonFlag()
+ {
+ 	return zlip_get_addition_flag();
+diff --git a/OfficeUtils/src/OfficeUtils.h b/OfficeUtils/src/OfficeUtils.h
+index 8637dafd70..b05d7bc6bb 100644
+--- a/OfficeUtils/src/OfficeUtils.h
++++ b/OfficeUtils/src/OfficeUtils.h
+@@ -76,6 +76,8 @@ public:
+ 
+ 	static int GetAddonFlag();
+ 	static void SetAddonFlag(int flag);
++
++	HRESULT IsZipSignature(const std::wstring& filename);
+ };
+ 
+ #define DEFLATE_NO_FLUSH      0
+diff --git a/RtfFile/Format/DestinationCommand.cpp b/RtfFile/Format/DestinationCommand.cpp
+index 3cf36b3c8a..5f7d8f6386 100644
+--- a/RtfFile/Format/DestinationCommand.cpp
++++ b/RtfFile/Format/DestinationCommand.cpp
+@@ -46,7 +46,7 @@
+ TextReader::TextReader( std::wstring& sName, bool bErease  ) : m_sName(sName), m_bErease(bErease)
+ {
+ }
+-void TextReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void TextReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	if( true == m_bErease )
+ 		XmlUtils::replace_all(sText, L";", L"");
+@@ -426,7 +426,7 @@ RtfNormalReader::RtfNormalReader( RtfDocument& oDocument, RtfReader& oReader )
+ 	}
+ 	m_nCurGroups = 0;
+ }
+-void RtfNormalReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfNormalReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	oParagraphReaderDestination.ExecuteText( oDocument, oReader, sText );
+ }
+@@ -705,7 +705,7 @@ bool RtfParagraphReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oRead
+ 	else
+ 		return m_oParPropDest.ExecuteCommand(oDocument, oReader, (*this), sCommand, hasParameter, parameter);
+ }
+-void RtfParagraphReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfParagraphReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	m_oParPropDest.ExecuteText(oDocument, oReader, sText);
+ }
+@@ -2022,7 +2022,7 @@ bool RtfMathReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, s
+ 
+ 	return true;
+ }
+-void RtfMathReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfMathReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	RtfCharPtr pNewChar ( new RtfChar() );
+ 	pNewChar->m_oProperty.Merge(m_oCharProp);
+@@ -2553,7 +2553,7 @@ bool RtfAnnotElemReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oRead
+ 		return false;
+ 	return true;
+ }
+-void RtfAnnotElemReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfAnnotElemReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	m_oAnnot.m_sValue += sText ;
+ }
+@@ -2579,7 +2579,7 @@ bool RtfBookmarkStartReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& o
+ 		return false;
+ 	return true;
+ }
+-void RtfBookmarkStartReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfBookmarkStartReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	m_oBookmarkStart.m_sName += sText ;
+ }
+@@ -2587,13 +2587,13 @@ void RtfBookmarkStartReader::ExecuteText(RtfDocument& oDocument, RtfReader& oRea
+ RtfBookmarkEndReader::RtfBookmarkEndReader( RtfBookmarkEnd& oBookmark ):m_oBookmarkEnd(oBookmark)
+ {
+ }
+-void RtfBookmarkEndReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfBookmarkEndReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	m_oBookmarkEnd.m_sName += sText;
+ }
+ 
+ RtfFieldInstReader::RtfFieldInstReader( RtfFieldInst& oFieldInst ) :  m_oFieldInst(oFieldInst) {}
+-void RtfFieldInstReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText )
++void RtfFieldInstReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText )
+ {
+ 	RtfParagraphPropDestination::ExecuteText(oDocument, oReader, sText);
+ }
+@@ -2633,7 +2633,7 @@ bool RtfFieldInstReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oRead
+ RtfFormFieldReader::RtfFormFieldReader(RtfFormField& oFormField) : m_oFormField(oFormField)
+ {
+ }
+-void RtfFormFieldReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfFormFieldReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	if (is_name == m_eInternalState)			m_oFormField.name += sText;
+ 	else if (is_deftext == m_eInternalState)	m_oFormField.deftext += sText;
+@@ -2700,7 +2700,7 @@ bool RtfOleBinReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader,
+ 	}
+ 	return true;
+ }
+-void RtfOleBinReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfOleBinReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	m_arData.push_back(std::string(sText.begin(), sText.end()));
+ }
+@@ -2805,11 +2805,17 @@ RtfShapeReader::ShapePropertyReader::ShapePropertyValueReader::ShapePropertyValu
+ }
+ bool RtfShapeReader::ShapePropertyReader::ShapePropertyValueReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader,  std::string sCommand, bool hasParameter, int parameter)
+ {
+-	if( "sv" == sCommand )
++	bool isMatchingCommand = ("pict" == sCommand);
++	// if (m_sPropName.size() == 9 && m_sPropName[8] == L'\0') {
++	// 	m_sPropName.resize(8);
++	// }
++	bool isMatchingPropName = (m_sPropName == L"pib" || m_sPropName == L"fillBlip");
++
++	if( "sv" == sCommand)
+ 		return true;
+-	else if( "pict" == sCommand && ( L"pib" == m_sPropName  || L"fillBlip" == m_sPropName))
++	else if(isMatchingCommand && isMatchingPropName)
+ 	{
+-		m_oShape.m_oPicture = RtfPicturePtr ( new RtfPicture() );
++ 		m_oShape.m_oPicture = RtfPicturePtr ( new RtfPicture() );
+ 		RtfPictureReader oPictureReader( oReader, m_oShape );
+ 		StartSubReader( oPictureReader, oDocument, oReader );
+ 	}
+@@ -2817,7 +2823,7 @@ bool RtfShapeReader::ShapePropertyReader::ShapePropertyValueReader::ExecuteComma
+ 		return false;
+ 	return true;
+ }
+-void RtfShapeReader::ShapePropertyReader::ShapePropertyValueReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText)
++void RtfShapeReader::ShapePropertyReader::ShapePropertyValueReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText)
+ {
+ 	m_sPropValue += oText;
+ }
+@@ -3433,7 +3439,7 @@ std::wstring RtfFontTableReader::RemoveLastUnchar(std::wstring str)
+ 	}
+ 	return str;
+ }
+-void RtfFontTableReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfFontTableReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	if( is_panose == m_eInternalState )
+ 		m_oFont.m_sPanose += sText;
+@@ -3516,7 +3522,7 @@ bool RtfColorTableReader::ExecuteCommand( RtfDocument& oDocument, RtfReader& oRe
+ 	m_bIsSet = true;
+ 	return true;
+ }
+-void RtfColorTableReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText )
++void RtfColorTableReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText )
+ {
+ 	//Romanization_Armenian.rtf
+ 	//{\colortbl\red0\blue159\green82;\red0\blue0\green0;\red255\blue255\green255;\red0\blue156\green90;\red169\blue86\green0;}
+@@ -3567,7 +3573,7 @@ bool RtfRevisionTableReader::ExecuteCommand( RtfDocument& oDocument, RtfReader&
+ 
+ 	return true;
+ }
+-void RtfRevisionTableReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText )
++void RtfRevisionTableReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText )
+ {
+ 	if (std::wstring::npos != sText.find(L";"))
+ 	{
+@@ -3713,7 +3719,7 @@ bool RtfInfoReader::ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader,
+ 	return true;
+ 
+ }
+-void RtfInfoReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText )
++void RtfInfoReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText )
+ {
+ 	if		( is_title		== m_eInternalState )	oDocument.m_oInformation.m_sTitle		+= sText.c_str();
+ 	else if	( is_subject	== m_eInternalState )	oDocument.m_oInformation.m_sSubject		+= sText.c_str();
+@@ -3913,9 +3919,17 @@ bool RtfPictureReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader
+ 	}
+ 	return true;
+ }
+-void RtfPictureReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfPictureReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+-	m_sData += sText;
++	if (m_sData.empty())
++	{
++		m_sData = std::move(sText);
++	}
++	else
++	{
++		m_sData.reserve(m_sData.size() + sText.size());
++        m_sData += sText;
++	}
+ }
+ void RtfPictureReader::ExitReader( RtfDocument& oDocument, RtfReader& oReader )
+ {
+@@ -4054,7 +4068,7 @@ RtfParagraphPropDestination::RtfParagraphPropDestination( )
+ 	m_oCurParagraph		= RtfParagraphPtr		(new RtfParagraph());
+ 	m_oTextItems		= TextItemContainerPtr	( new TextItemContainer() );
+ }
+-void RtfParagraphPropDestination::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfParagraphPropDestination::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	m_bPar = false;
+ 	RtfCharPtr pNewChar ( new RtfChar() );
+@@ -4995,7 +5009,7 @@ bool RtfFootnoteReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oReade
+ 
+ 	return true;
+ }
+-void RtfFootnoteReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText )
++void RtfFootnoteReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText )
+ {
+ 	m_oParPropDest.ExecuteText( oDocument, oReader, sText );
+ }
+@@ -5042,7 +5056,7 @@ bool RtfAnnotationReader::ExecuteCommand(RtfDocument& oDocument, RtfReader& oRea
+ 		return m_oParPropDest.ExecuteCommand( oDocument, oReader, (*this), sCommand, hasParameter, parameter );
+ 	return true;
+ }
+-void RtfAnnotationReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText )
++void RtfAnnotationReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText )
+ {
+ 	m_oParPropDest.ExecuteText( oDocument, oReader, sText );
+ }
+@@ -5278,7 +5292,7 @@ bool RtfStyleTableReader::RtfStyleReader::ExecuteCommand(RtfDocument& oDocument,
+ 	return true;
+ 
+ }
+-void RtfStyleTableReader::RtfStyleReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText)
++void RtfStyleTableReader::RtfStyleReader::ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText)
+ {
+ 	while (true)
+ 	{
+diff --git a/RtfFile/Format/DestinationCommand.h b/RtfFile/Format/DestinationCommand.h
+index 2d0ea20e67..0083d2ac73 100644
+--- a/RtfFile/Format/DestinationCommand.h
++++ b/RtfFile/Format/DestinationCommand.h
+@@ -123,7 +123,7 @@ private:
+ public:
+ 	TextReader( std::wstring& sName, bool bErease = true );
+ 
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ };
+ 
+ class RtfCharPropsCommand
+@@ -205,7 +205,7 @@ public:
+ 	void ExecuteTextInternal2( RtfDocument& oDocument, RtfReader& oReader, std::string & sKey, int& nSkipChars);
+ 
+ 	std::wstring RemoveLastUnchar(std::wstring str);
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ 	void PopState(RtfDocument& oDocument, RtfReader& oReader);
+ };
+ 
+@@ -219,7 +219,7 @@ public:
+ 	RtfColorTableReader();
+ 
+ 	bool ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader, std::string sKey, bool bHasPar, int nPar );
+-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText );
++	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText );
+ };
+ 
+ class RtfDefCharPropReader: public RtfAbstractReader
+@@ -237,7 +237,7 @@ public:
+ 	RtfRevisionTableReader();
+ 
+ 	bool ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader, std::string sKey, bool bHasPar, int nPar );
+-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText );
++	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText );
+ 
+ private:
+ 	std::wstring m_sCurrent;
+@@ -254,7 +254,7 @@ public:
+ 	RtfInfoReader();
+ 
+ 	bool ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader,  std::string sCommand, bool hasParameter, int parameter);
+-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText );
++	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText );
+ };
+ 
+ class RtfPictureReader :  public RtfAbstractReader
+@@ -300,7 +300,7 @@ public:
+ 	RtfPictureReader( RtfReader& oReader, RtfShape& oShape );
+ 	~RtfPictureReader();
+ 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ 	void ExitReader( RtfDocument& oDocument, RtfReader& oReader );
+ };
+ 
+@@ -322,7 +322,7 @@ public:
+ 	RtfOleBinReader();
+ 
+ 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ 	void GetData( BYTE** ppData, long& nSize);
+ };
+ 
+@@ -370,7 +370,7 @@ public:
+ 
+ 			bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader,  std::string sCommand, bool hasParameter, int parameter);
+ 			void PopState( RtfDocument& oDocument, RtfReader& oReader );
+-			void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText);
++			void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText);
+ 		};
+ 
+ 	private:
+@@ -460,7 +460,7 @@ public:
+ 	RtfMathReader(RtfMathPtr& pMath);
+ 
+ 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ 	std::wstring ExecuteMathProp(RtfDocument& oDocument, std::string sCommand, int parameter);
+ 	void ExitReader2( RtfDocument& oDocument, RtfReader& oReader );
+ };
+@@ -493,7 +493,7 @@ public:
+ 	RtfAnnotElemReader( RtfAnnotElem& oAnnot );
+ 
+ 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ };
+ 
+ class RtfBookmarkStartReader: public RtfAbstractReader
+@@ -504,7 +504,7 @@ public:
+ 	RtfBookmarkStartReader( RtfBookmarkStart& oBookmark );
+ 
+ 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ };
+ 
+ class RtfBookmarkEndReader: public RtfAbstractReader
+@@ -513,7 +513,7 @@ public:
+ 	RtfBookmarkEnd& m_oBookmarkEnd;
+ 
+ 	RtfBookmarkEndReader( RtfBookmarkEnd& oBookmark );
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ };
+ 
+ class FootnoteReader;
+@@ -551,7 +551,7 @@ public:
+ 	RtfParagraphPropDestination( );
+ 
+ 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader,RtfAbstractReader& oAbstrReader, std::string sCommand, bool hasParameter, int parameter);
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ 
+ 	void AddItem( RtfParagraphPtr oItem, RtfReader& oReader, bool bEndCell, bool bEndRow );
+ 	
+@@ -571,7 +571,7 @@ public:
+ 	RtfFootnoteReader( RtfFootnote& oRtfFootnote );
+ 
+ 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
+-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText );
++	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText );
+ 	void ExitReader( RtfDocument& oDocument, RtfReader& oReader );
+ };
+ 
+@@ -586,7 +586,7 @@ public:
+ 	RtfAnnotationReader( RtfAnnotation& oRtfAnnotation );
+ 
+ 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
+-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText );
++	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText );
+ 	void ExitReader( RtfDocument& oDocument, RtfReader& oReader );
+ };
+ 
+@@ -727,7 +727,7 @@ class RtfStyleTableReader: public RtfAbstractReader
+ 		RtfStyleReader();
+ 
+ 		bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
+-		void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++		void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ 		void ExitReader(RtfDocument& oDocument, RtfReader& oReader);
+ 	};
+ 
+@@ -831,7 +831,7 @@ public:
+ 	RtfNormalReader( RtfDocument& oDocument, RtfReader& oReader );
+ 
+ 	bool ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter );
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ 	void ExitReader(RtfDocument& oDocument, RtfReader& oReader);
+ 
+ private: 
+@@ -849,7 +849,7 @@ public:
+ 	RtfParagraphReader(std::string sHeader, RtfReader& oReader);
+ 
+ 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ 	void ExitReader(RtfDocument& oDocument, RtfReader& oReader);
+ };
+ 
+@@ -859,7 +859,7 @@ public:
+ 	RtfFormFieldReader(RtfFormField& oFormField);
+ 	
+ 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader, std::string sCommand, bool hasParameter, int parameter);
+-	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring sText);
++	void ExecuteText(RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText);
+ 
+ private:
+ 	enum _InternalState {
+@@ -878,6 +878,6 @@ public:
+ 	RtfFieldInstReader( RtfFieldInst& oFieldInst );
+ 	bool ExecuteCommand(RtfDocument& oDocument, RtfReader& oReader , std::string sCommand, bool hasParameter, int parameter);
+ 
+-	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring sText );
++	void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& sText );
+ 	void ExitReader( RtfDocument& oDocument, RtfReader& oReader );
+ };
+diff --git a/RtfFile/Format/RtfLex.cpp b/RtfFile/Format/RtfLex.cpp
+index 47afb473f1..9a7a066f87 100644
+--- a/RtfFile/Format/RtfLex.cpp
++++ b/RtfFile/Format/RtfLex.cpp
+@@ -34,6 +34,9 @@
+  */
+ 
+ #include "RtfLex.h"
++#include <iostream>
++
++#define RTF_CHUNK_SIZE (1024*64*1) //64KB
+ 
+ StringStream::StringStream()
+ {
+@@ -50,50 +53,130 @@ void StringStream::Clear()
+ 
+ 	m_nSizeAbs = 0;
+ 	m_nPosAbs = -1;
++	m_nBlockSize = 0;
++	m_nBlockStart = 0;
++	m_ungetcBuffer.clear();
++	m_srcFile.CloseFile();
++}
++
++bool StringStream::SetSource( std::wstring sPath )
++{
++	return SetSource(sPath, true);
+ }
+-bool StringStream::SetSource( std::wstring sPath  )
++bool StringStream::SetSource( std::wstring sPath, bool bReadByChunk)
+ {
+ 	Clear();
++	m_bReadByBlock = bReadByChunk;
++	if (false == m_srcFile.OpenFile(sPath.c_str())) return false;
+ 
+-	NSFile::CFileBinary srcFile;
+-	if (false == srcFile.OpenFile(sPath.c_str())) return false;
+-
+-	__int64 totalFileSize = srcFile.GetFileSize();
++	__int64 totalFileSize = m_srcFile.GetFileSize();
+ 	if (totalFileSize < 5)
+ 	{
+-		srcFile.CloseFile();
++		m_srcFile.CloseFile();
+ 		return false;
+ 	}
+-
+ 	m_nSizeAbs = (long)totalFileSize;
+-	m_aBuffer = new unsigned char[m_nSizeAbs];
++	m_aBuffer = new unsigned char[RTF_CHUNK_SIZE];
++	
+ 	DWORD dwBytesRead = 0;
++	m_srcFile.ReadFile(m_aBuffer, RTF_CHUNK_SIZE, dwBytesRead);
++	m_nBlockSize = dwBytesRead;
++	m_nBlockStart = 0;
++	return true;
++}
+ 
+-	srcFile.ReadFile(m_aBuffer, (DWORD)m_nSizeAbs);
++void StringStream::ReadNextBlock(){
+ 
+-	dwBytesRead = (DWORD)srcFile.GetPosition();
+-	srcFile.CloseFile();
+-	return true;
++	memset(m_aBuffer, 0, RTF_CHUNK_SIZE);
++	DWORD dwBytesRead = 0;
++	m_srcFile.ReadFile(m_aBuffer, RTF_CHUNK_SIZE, dwBytesRead);
++	if (dwBytesRead < RTF_CHUNK_SIZE)
++		m_srcFile.CloseFile();
++
++	m_nBlockStart += m_nBlockSize;
++	m_nBlockSize = dwBytesRead;
+ }
++
+ void StringStream::getBytes( int nCount, BYTE** pbData )
+ {
+-	if( m_nPosAbs + nCount < m_nSizeAbs )
++	if (!m_bReadByBlock)
++	{
++		if( m_nPosAbs + nCount < m_nSizeAbs )
++		{
++			(*pbData) = new BYTE[nCount];
++			memcpy( (*pbData), (m_aBuffer + m_nPosAbs + 1), nCount);
++			m_nPosAbs += nCount;
++		}
++	}
++	else
+ 	{
+-		(*pbData) = new BYTE[nCount];
+-		memcpy( (*pbData), (m_aBuffer + m_nPosAbs + 1), nCount);
+-		m_nPosAbs += nCount;
++
++		if ( m_nPosAbs + nCount < m_nSizeAbs )
++		{
++			(*pbData) = new BYTE[nCount];
++			int nBytesRead = 0;
++
++			while (nBytesRead < nCount && !m_ungetcBuffer.empty()) {
++				(*pbData)[nBytesRead++] = m_ungetcBuffer.back();
++				m_ungetcBuffer.pop_back();
++			}
++
++			while(nBytesRead < nCount)
++			{
++				LONG64 startPos = m_nPosAbs + 1 - m_nBlockStart;
++				if (m_nPosAbs + nCount < m_nBlockStart + m_nBlockSize)
++				{
++					memcpy( (*pbData), (m_aBuffer + startPos), nCount);
++					break;
++				}
++				else{
++					int nCount1 = m_nBlockStart + m_nBlockSize -1 - m_nPosAbs;
++					memcpy( (*pbData), (m_aBuffer + startPos), nCount1);
++					nBytesRead += nCount1;
++					m_nPosAbs += nCount1;
++					ReadNextBlock();
++				}
++			}
++		}
+ 	}
+ }
++
+ int StringStream::getc()
+ {
+ 	int nResult = EOF;
+-	if( m_nPosAbs + 1 < m_nSizeAbs )
++	if (!m_ungetcBuffer.empty()) {
++		nResult = m_ungetcBuffer.back();
++		m_ungetcBuffer.pop_back();
++		return nResult;
++	}
++
++	if (m_nPosAbs + 1 >= m_nSizeAbs)
++		return nResult;
++
++	if (!m_bReadByBlock)
+ 	{
+ 		m_nPosAbs++;
+ 		nResult = m_aBuffer[ m_nPosAbs ];
+ 	}
++	else
++	{
++		if (m_nPosAbs + 1 <= m_nBlockStart + m_nBlockSize -1)
++		{
++			LONG64 startPos = m_nPosAbs + 1 - m_nBlockStart;
++			nResult = m_aBuffer[ startPos ];
++			m_nPosAbs++;
++		}
++		else
++		{
++			ReadNextBlock();
++			m_nPosAbs++;
++			nResult = m_aBuffer[ 0 ];
++		}
++	}
+ 	return nResult;
+ }
++
++/*
+ void StringStream::ungetc()
+ {
+ 	//in the project ungetc is used only after getc
+@@ -102,7 +185,16 @@ void StringStream::ungetc()
+ 	{
+ 		m_nPosAbs--;	//take any txt rename to rtf - infinite loop
+ 	}
++}*/
++
++void StringStream::ungetc(char c) {
++	if (m_ungetcBuffer.size() < RTF_CHUNK_SIZE) {
++		m_ungetcBuffer.push_back(c);
++	} else {
++		std::cerr << "ungetc buffer overflow!" << std::endl;
++	}
+ }
++
+ void StringStream::putString( std::string sText )
+ {
+ 	size_t nExtBufSize = sText.length();
+@@ -134,8 +226,9 @@ LONG64 StringStream::getSize()
+ RtfLex::RtfLex()
+ {
+ 	m_oFileWriter = NULL;
+-	m_nReadBufSize = 1024 * 1024 * 5; // 5MB
+-	m_caReadBuffer = new char[m_nReadBufSize];
++	m_nReadBufSize = RTF_CHUNK_SIZE;
++	m_nAbsSize = 0;
++	m_caReadBuffer = NULL;
+ }
+ RtfLex::~RtfLex()
+ {
+@@ -149,14 +242,14 @@ double RtfLex::GetProgress()
+ }
+ bool RtfLex::SetSource( std::wstring sPath )
+ {
+-	if (false == m_oStream.SetSource(sPath)) return false;
++	if (false == m_oStream.SetSource(sPath, true)) return false;
+ 
+-	if (m_oStream.getSize() > m_nReadBufSize)
+-	{
+-		m_nReadBufSize = (int)m_oStream.getSize() ;
+-		if (m_caReadBuffer) delete []m_caReadBuffer;
+-		m_caReadBuffer = new char[m_nReadBufSize];
+-	}
++	if (m_oStream.getSize() < m_nReadBufSize) 
++		m_nReadBufSize = m_oStream.getSize();
++
++	m_nAbsSize = m_oStream.getSize();
++	if (m_caReadBuffer) delete []m_caReadBuffer;
++	m_caReadBuffer = new char[m_nReadBufSize];
+ 	return true;
+ }
+ void RtfLex::CloseSource()
+@@ -224,7 +317,7 @@ void RtfLex::parseKeyword(RtfToken& token)
+ 	int parametroInt = 0;
+ 
+ 	int c = m_oStream.getc();
+-	m_oStream.ungetc();
++	m_oStream.ungetc(c);
+ 	bool negativo = false;
+ 
+ 	if ( !RtfUtility::IsAlpha( c ) )
+@@ -279,7 +372,7 @@ void RtfLex::parseKeyword(RtfToken& token)
+ 		return;
+ 	}
+ 	c = m_oStream.getc();
+-	m_oStream.ungetc();
++	m_oStream.ungetc(c);
+ 
+ 	while (RtfUtility::IsAlpha(c))
+ 	{
+@@ -287,7 +380,7 @@ void RtfLex::parseKeyword(RtfToken& token)
+ 		palabraClave += (char)c;
+ 
+ 		c = m_oStream.getc();
+-		m_oStream.ungetc();
++		m_oStream.ungetc(c);
+ 	}
+ 
+ 	token.Type = RtfToken::Keyword;
+@@ -305,14 +398,14 @@ void RtfLex::parseKeyword(RtfToken& token)
+ 		}
+ 
+ 		c = m_oStream.getc();
+-		m_oStream.ungetc();
++		m_oStream.ungetc(c);
+ 		while (RtfUtility::IsDigit(c))
+ 		{
+ 			m_oStream.getc();
+ 			parametroStr += c;
+ 
+ 			c = m_oStream.getc();
+-			m_oStream.ungetc();
++			m_oStream.ungetc(c);
+ 		}
+ 		try
+ 		{
+@@ -348,6 +441,7 @@ void RtfLex::parseKeyword(RtfToken& token)
+ 		m_oStream.getc();
+ 	}
+ }
++
+ void RtfLex::parseText(int car, RtfToken& token)
+ {
+ 	int nTempBufPos = 0; //1 MB
+@@ -358,13 +452,27 @@ void RtfLex::parseText(int car, RtfToken& token)
+ 	//while (c != ';' &&c ! = '\\' && c != '}' && c != '{' && c != EOF)
+ 	while (c != '\\' && c != '}' && c != '{' && c != EOF)
+ 	{
+-		if( nTempBufPos >= m_nReadBufSize )
++		if (nTempBufPos >= m_nAbsSize)
+ 		{
+ 			m_caReadBuffer[nTempBufPos++] = '\0';
+-			token.Key += m_caReadBuffer ;
+-			nTempBufPos = 0;
++ 			token.Key += m_caReadBuffer ;
++ 			nTempBufPos = 0;
++			memset(m_caReadBuffer, 0, m_nReadBufSize);
++		}
++		else
++		{
++			if (nTempBufPos < m_nReadBufSize)
++			{
++				m_caReadBuffer[nTempBufPos++] = (char)c;
++			}
++			else
++			{
++				token.Key += m_caReadBuffer;
++				memset(m_caReadBuffer, 0, m_nReadBufSize);
++				nTempBufPos = 0;
++				m_caReadBuffer[nTempBufPos++] = (char)c;
++			}
+ 		}
+-		m_caReadBuffer[nTempBufPos++] = (char)c;
+ 
+ 		c = m_oStream.getc();
+ 		//Se ignoran los retornos de carro, tabuladores y caracteres nulos
+@@ -373,24 +481,65 @@ void RtfLex::parseText(int car, RtfToken& token)
+ 	}
+ 	if (c != EOF)
+ 	{
+-		m_oStream.ungetc();
++		m_oStream.ungetc(c);
+ 	}
+ 	if( nTempBufPos > 0 )
+ 	{
++		// token.Key += m_caReadBuffer;
++		// memset(m_caReadBuffer, 0, m_nReadBufSize);
++		// token.Key +='\0';
++		// nTempBufPos = 0;
++
+ 		m_caReadBuffer[nTempBufPos++] = '\0';
+-		token.Key += m_caReadBuffer ;
++ 		token.Key += m_caReadBuffer ;
++		memset(m_caReadBuffer, 0, m_nReadBufSize);
++		nTempBufPos = 0;
+ 	}
+ }
++
++// void RtfLex::parseText(int car, RtfToken& token)
++// {
++// 	int nTempBufPos = 0; //1 мб
++
++// 	int c = car;
++// 	//while ((isalnum(c) || c == '"'|| c == ':'|| c == '/' || c == '.') &&c != '\\' && c != '}' && c != '{' && c != Eof) // иправиЃEЃEрвьD усЃEвиЃE
++// 	//while (c != '\\' && c != '}' && c != '{' && c != Eof)
++// 	//while (c != ';' &&c ! = '\\' && c != '}' && c != '{' && c != EOF)
++// 	while (c != '\\' && c != '}' && c != '{' && c != EOF)
++// 	{
++// 		if( nTempBufPos >= m_nReadBufSize )
++// 		{
++// 			m_caReadBuffer[nTempBufPos++] = '\0';
++// 			token.Key += m_caReadBuffer ;
++// 			nTempBufPos = 0;
++// 		}
++// 		m_caReadBuffer[nTempBufPos++] = (char)c;
++
++// 		c = m_oStream.getc();
++// 		//Se ignoran los retornos de carro, tabuladores y caracteres nulos
++// 		while (c == '\r' || c == '\n')
++// 			c = m_oStream.getc();
++// 	}
++// 	if (c != EOF)
++// 	{
++// 		m_oStream.ungetc(c);
++// 	}
++// 	if( nTempBufPos > 0 )
++// 	{
++// 		m_caReadBuffer[nTempBufPos++] = '\0';
++// 		token.Key += m_caReadBuffer ;
++// 	}
++// }
+ bool RtfLex::GetNextChar( int& nChar )
+ {
+ 	int c = m_oStream.getc();
+-	m_oStream.ungetc();
++	m_oStream.ungetc(c);
+ 	//Se ignoran los retornos de carro, tabuladores y caracteres nulos
+ 	while (c == '\r' || c == '\n')
+ 	{
+ 		m_oStream.getc();
+ 		c = m_oStream.getc();
+-		m_oStream.ungetc();
++		m_oStream.ungetc(c);
+ 	}
+ 	if( c != '\\' && c != '}' && c != '{' && c != EOF )
+ 	{
+diff --git a/RtfFile/Format/RtfLex.h b/RtfFile/Format/RtfLex.h
+index 08e5a050c3..448910da39 100644
+--- a/RtfFile/Format/RtfLex.h
++++ b/RtfFile/Format/RtfLex.h
+@@ -38,28 +38,38 @@
+ #include "Utils.h"
+ #include "Basic.h"
+ 
++#include <deque>
++
+ class StringStream
+ {
+ private: 
+ 	LONG64 m_nSizeAbs;//file size
+ 	LONG64 m_nPosAbs;//position in file
++	LONG64 m_nBlockSize;
++	LONG64 m_nBlockStart;
+ 
+-	unsigned char* m_aBuffer;
++	NSFile::CFileBinary m_srcFile;
+ 
++	unsigned char* m_aBuffer;
++	std::deque<char> m_ungetcBuffer;
++	bool m_bReadByBlock = true;
+ public:
+ 	StringStream();
+ 	~StringStream();
+ 
+ 	void Clear();
+-
++	bool SetSource( std::wstring sPath, bool bReadByChunk);
+ 	bool SetSource( std::wstring sPath  );
+ 	void getBytes( int nCount, BYTE** pbData );
+ 	int getc();
+-	void ungetc();
++	//void ungetc();
++	void ungetc(char c);
+ 	void putString( std::string sText );
+ 
+ 	LONG64 getCurPosition();
+ 	LONG64 getSize();
++
++	void ReadNextBlock();
+ };
+ 
+ class RtfLex
+@@ -72,6 +82,7 @@ public:
+ 	NFileWriter::CBufferedFileWriter* m_oFileWriter;
+ 	char* m_caReadBuffer;
+ 	int m_nReadBufSize;
++	int m_nAbsSize;
+ 
+ 	RtfLex();
+ 	~RtfLex();
+diff --git a/RtfFile/Format/RtfReader.cpp b/RtfFile/Format/RtfReader.cpp
+index 2e3b0d06c3..38a5d9b83f 100644
+--- a/RtfFile/Format/RtfReader.cpp
++++ b/RtfFile/Format/RtfReader.cpp
+@@ -168,7 +168,7 @@ bool RtfAbstractReader::ExecuteCommand( RtfDocument& oDocument, RtfReader& oRead
+ {
+ 	return true;
+ }
+-void RtfAbstractReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText )
++void RtfAbstractReader::ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText )
+ {
+ }
+ void RtfAbstractReader::ExitReader( RtfDocument& oDocument, RtfReader& oReader )
+@@ -208,7 +208,8 @@ bool RtfAbstractReader::RtfAbstractReader::Parse(RtfDocument& oDocument, RtfRead
+ 			ExecuteTextInternal2(oDocument, oReader, m_oTok.Key, m_nSkipChars);
+ 			if (m_oTok.Key == "u")
+ 			{
+-				ExecuteText(oDocument, oReader, ExecuteTextInternal(oDocument, oReader, m_oTok.Key, m_oTok.HasParameter, m_oTok.Parameter, m_nSkipChars));
++				std::wstring strText = ExecuteTextInternal(oDocument, oReader, m_oTok.Key, m_oTok.HasParameter, m_oTok.Parameter, m_nSkipChars);
++				ExecuteText(oDocument, oReader, strText);
+ 				break;
+ 			}
+ 			else
+@@ -247,7 +248,10 @@ bool RtfAbstractReader::RtfAbstractReader::Parse(RtfDocument& oDocument, RtfRead
+ 		}break;
+ 		case RtfToken::Text:
+ 		{
+-			oReader.m_oState->m_sCurText += m_oTok.Key;
++			if (oReader.m_oState->m_sCurText.empty())
++				oReader.m_oState->m_sCurText = std::move(m_oTok.Key);
++			else
++				oReader.m_oState->m_sCurText += std::move(m_oTok.Key);
+ 		}break;
+ 
+ 		}
+@@ -285,7 +289,7 @@ std::wstring RtfAbstractReader::ExecuteTextInternal(RtfDocument& oDocument, RtfR
+ 		else
+ 			sCharString = sKey;
+ 
+-		sResult = ExecuteTextInternalCodePage(sCharString, oDocument, oReader);
++		ExecuteTextInternalCodePage(sCharString, oDocument, oReader, sResult);
+ 	}
+ 	ExecuteTextInternalSkipChars(sResult, oReader, sKey, nSkipChars);
+ 	return sResult;
+@@ -297,9 +301,11 @@ void RtfAbstractReader::ExecuteTextInternal2(RtfDocument& oDocument, RtfReader&
+ 		std::string str;
+ 		ExecuteTextInternalSkipChars(oReader.m_oState->m_sCurText, oReader, str, nSkipChars);
+ 		
+-		std::wstring sResult = ExecuteTextInternalCodePage(oReader.m_oState->m_sCurText, oDocument, oReader);
++		std::wstring sResult;
++		ExecuteTextInternalCodePage(oReader.m_oState->m_sCurText, oDocument, oReader, sResult);
+ 		
+ 		oReader.m_oState->m_sCurText.erase();
++		oReader.m_oState->m_sCurText.shrink_to_fit();
+ 		oReader.m_oState->m_bControlPresent = false;
+ 		
+ 		if (false == sResult.empty())
+@@ -320,7 +326,7 @@ void RtfAbstractReader::ExecuteTextInternalSkipChars(std::string & sResult, RtfR
+ 		}
+ 		else
+ 		{
+-			sResult = sResult.substr(nSkipChars);
++			sResult = std::move(sResult.substr(nSkipChars));
+ 		}
+ 		nSkipChars = 0;
+ 	}
+@@ -352,12 +358,16 @@ void RtfAbstractReader::ExecuteTextInternalSkipChars(std::wstring & sResult, Rtf
+ 		nSkipChars = oReader.m_oState->m_nUnicodeClean;
+ 	}
+ }
+-std::wstring RtfAbstractReader::ExecuteTextInternalCodePage( std::string& sCharString, RtfDocument& oDocument, RtfReader& oReader)
++
++
++void RtfAbstractReader::ExecuteTextInternalCodePage( std::string& sCharString, RtfDocument& oDocument, RtfReader& oReader, std::wstring& sResult)
+ {
+-	if (sCharString.empty()) return L"";
+-	if (sCharString == "*") return L"*";
+-	
+-	std::wstring sResult;
++	if (sCharString.empty()) return;
++	if (sCharString == "*")
++	{
++		sResult = L"*";
++		return;
++	} 
+ 
+ 	int nCodepage = -1;
+ 
+@@ -415,13 +425,27 @@ std::wstring RtfAbstractReader::ExecuteTextInternalCodePage( std::string& sCharS
+ 	}
+ 	else
+ 	{
+-		sResult = RtfUtility::convert_string_icu(sCharString.begin(), sCharString.end(), nCodepage);
+-	}
++		const size_t MAX_CONVERT_CHUNK_SIZE = 1024 * 1024; //1MB
++		if (sCharString.size() <= MAX_CONVERT_CHUNK_SIZE)
++			sResult = RtfUtility::convert_string_icu(sCharString.begin(), sCharString.end(), nCodepage);
++		else
++		{
++			size_t processed = 0;
++			while (processed < sCharString.size()) {
++				size_t chunkSize = std::min(MAX_CONVERT_CHUNK_SIZE, sCharString.size() - processed);
++				
++				auto chunkBegin = sCharString.begin() + processed;
++				auto chunkEnd = sCharString.begin() + processed + chunkSize;
++				
++				std::wstring chunkResult = RtfUtility::convert_string_icu(chunkBegin, chunkEnd, nCodepage);
++				chunkResult.shrink_to_fit();
+ 
+-	//if (!sCharString.empty() && sResult.empty())
+-	//{
+-	//	//code page not support in icu !!!
+-	//	sResult = RtfUtility::convert_string(sCharString.begin(), sCharString.end(), nCodepage); .. to UnicodeConverter
+-	//}
+-    return sResult;
+-}
++				if (sResult.empty())
++					sResult = std::move(chunkResult);
++				else
++					sResult += std::move(chunkResult);
++				processed += chunkSize;
++			}
++		}
++	}
++}
+\ No newline at end of file
+diff --git a/RtfFile/Format/RtfReader.h b/RtfFile/Format/RtfReader.h
+index 27ca159a2d..79e6a7ca8f 100644
+--- a/RtfFile/Format/RtfReader.h
++++ b/RtfFile/Format/RtfReader.h
+@@ -103,7 +103,7 @@ public:
+ 
+ 	virtual bool ExecuteCommand( RtfDocument& oDocument, RtfReader& oReader, std::string sKey, bool bHasPar, int nPar );
+ 
+-	virtual void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring oText );
++	virtual void ExecuteText( RtfDocument& oDocument, RtfReader& oReader, std::wstring& oText );
+ 	virtual void ExitReader( RtfDocument& oDocument, RtfReader& oReader );
+ 	virtual void ExitReader2( RtfDocument& oDocument, RtfReader& oReader );
+ 
+@@ -112,7 +112,7 @@ public:
+ 
+ 	void ExecuteTextInternalSkipChars(std::wstring & sResult, RtfReader& oReader, std::string & sKey, int& nSkipChars);
+ 	void ExecuteTextInternalSkipChars(std::string & sResult, RtfReader& oReader, std::string & sKey, int& nSkipChars);
+-	std::wstring ExecuteTextInternalCodePage( std::string & sCharString, RtfDocument & oDocument, RtfReader & oReader);
++	void ExecuteTextInternalCodePage( std::string & sCharString, RtfDocument & oDocument, RtfReader & oReader, std::wstring& sResult);
+ 	
+ 	bool		m_bUseGlobalCodepage;
+ 	bool		m_bStopReader;
+diff --git a/RtfFile/Format/Utils.cpp b/RtfFile/Format/Utils.cpp
+index e56db55f8f..6756ba1e3b 100644
+--- a/RtfFile/Format/Utils.cpp
++++ b/RtfFile/Format/Utils.cpp
+@@ -318,30 +318,35 @@ void RtfUtility::WriteDataToFileBinary(std::wstring& sFilename, BYTE* pbData, si
+ 	file.WriteFile(pbData, (DWORD)nLength);
+ 	file.CloseFile();
+ }
++
+ void RtfUtility::WriteDataToFile(std::wstring& sFilename, std::wstring& sData)
+ {
+ 	NSFile::CFileBinary file;
+-
+ 	if (false == file.CreateFileW(sFilename)) return;
+ 
+ 	wchar_t * buf  = (wchar_t *)sData.c_str();
+-	size_t nLengthText	= sData.length();
+-	size_t nLengthData	= nLengthText/2;
+-
+-	BYTE * buf2 = new BYTE[ nLengthData];
+-	BYTE nByte=0;
+-
+-	for (size_t i = 0; i < nLengthData ; i++ )
+-	{
+-		nByte = ToByte( buf[2 * i] ) << 4;
+-		nByte |= ToByte( buf[2 * i + 1] );
+-		buf2[i] = nByte;
++	size_t nLengthData	= sData.length()/2;
++	size_t remaining = nLengthData;
++
++	const size_t sBuffSize = std::min(nLengthData, static_cast<size_t>(64*1024)); //4M
++	std::vector<BYTE> buffer(sBuffSize);
++	
++	size_t currentPos = 0;
++	while (remaining > 0) {
++		size_t blockSize = (remaining > sBuffSize) ? sBuffSize : remaining;
++		for (size_t i = 0; i < blockSize; i++) {
++			const size_t charIndex = 2 * (currentPos + i);
++			BYTE nByte = (ToByte(buf[charIndex]) << 4 | ToByte(buf[charIndex + 1]));
++			buffer[i] = nByte;
++		}
++		
++		file.WriteFile(buffer.data(), (DWORD)blockSize);
++		currentPos += blockSize;
++		remaining -= blockSize;
+ 	}
+-	file.WriteFile(buf2 ,(DWORD)nLengthData);
+-	delete[] buf2;
+ 	file.CloseFile();
+-
+ }
++
+ void RtfUtility::DecodeHexString( std::string sHexText, BYTE *&pData )
+ {
+ 	if (sHexText.empty()) return;
+diff --git a/UnicodeConverter/UnicodeConverter.cpp b/UnicodeConverter/UnicodeConverter.cpp
+index 4bbd366a93..a52c64c4c5 100644
+--- a/UnicodeConverter/UnicodeConverter.cpp
++++ b/UnicodeConverter/UnicodeConverter.cpp
+@@ -301,6 +301,7 @@ namespace NSUnicodeConverter
+ 							if (U_SUCCESS(status))
+ 							{
+ 								sRes.resize((size_t)nResLen);
++
+ 							}
+ 							else
+ 							{
+@@ -506,5 +507,4 @@ namespace NSUnicodeConverter
+ 		g_overrideIcuDataPath = internal.GetUtf8StringFromUnicode(sDirectory.c_str(), sDirectory.length());
+ 		u_setDataDirectory(g_overrideIcuDataPath.c_str());
+ 	}
+-
+ }
+diff --git a/X2tConverter/build/Qt/X2tConverter.pri b/X2tConverter/build/Qt/X2tConverter.pri
+index 2a655e82a8..c69671d33f 100644
+--- a/X2tConverter/build/Qt/X2tConverter.pri
++++ b/X2tConverter/build/Qt/X2tConverter.pri
+@@ -92,12 +92,14 @@ DEPENDPATH += $$PWD/../../../OOXML/Binary/Document
+ SOURCES += \
+ 	../../../Common/OfficeFileFormatChecker2.cpp \
+ 	../../src/cextracttools.cpp \
+-	../../src/ASCConverters.cpp
++	../../src/ASCConverters.cpp	\
++	../../src/log.cpp
+ 
+ HEADERS += \
+ 	../../../Common/OfficeFileFormatChecker.h \
+ 	../../src/cextracttools.h \
+-	../../src/ASCConverters.h
++	../../src/ASCConverters.h \
++	../../src/log.h
+ 
+ HEADERS += \
+ 	../../src/lib/common.h \
+diff --git a/X2tConverter/src/ASCConverters.cpp b/X2tConverter/src/ASCConverters.cpp
+index 78fdbab89d..79cb7963c2 100644
+--- a/X2tConverter/src/ASCConverters.cpp
++++ b/X2tConverter/src/ASCConverters.cpp
+@@ -1687,7 +1687,6 @@ namespace NExtractTools
+ 		
+ 		std::wstring sFileFrom = oInputParams.m_sFileFrom  ? *oInputParams.m_sFileFrom : L"";
+ 		std::wstring sFileTo = oInputParams.m_sFileTo ? *oInputParams.m_sFileTo : L"";
+-
+ 		int nFormatFrom = AVS_OFFICESTUDIO_FILE_UNKNOWN;
+ 		if (NULL != oInputParams.m_nFormatFrom)
+ 			nFormatFrom = *oInputParams.m_nFormatFrom;
+diff --git a/X2tConverter/src/cextracttools.h b/X2tConverter/src/cextracttools.h
+index c98f335d05..f1e69b4b54 100644
+--- a/X2tConverter/src/cextracttools.h
++++ b/X2tConverter/src/cextracttools.h
+@@ -1295,6 +1295,15 @@ namespace NExtractTools
+ 			NSFile::CFileBinary file;
+ 			return file.OpenFile(*m_sFileFrom) && 0 == file.GetFileSize();
+ 		}
++
++		int getFileSize()
++        {
++            NSFile::CFileBinary file;
++            if (file.OpenFile(*m_sFileFrom))
++                return file.GetFileSize();
++            return 0;
++        }
++
+ 		int getEncodingByContent()
+ 		{
+ 			int nRes = -1;
+diff --git a/X2tConverter/src/main.cpp b/X2tConverter/src/main.cpp
+index c531a09f89..5cd399361f 100644
+--- a/X2tConverter/src/main.cpp
++++ b/X2tConverter/src/main.cpp
+@@ -39,7 +39,7 @@
+ #include "ASCConverters.h"
+ #include "cextracttools.h"
+ #include "../../DesktopEditor/fontengine/ApplicationFontsWorker.h"
+-
++#include "log.h"
+ #include <iostream>
+ 
+ #define VALUE_TO_STRING(x) #x
+@@ -74,7 +74,9 @@ int wmain_lib(int argc, wchar_t *argv[])
+ 	// #define DEBUG_NEW new(_NORMAL_BLOCK, __FILE__, __LINE__)
+ 	// #define new DEBUG_NEW
+ 
++	x2t::Logger logger("/tmp", "x2t.log");
+ 	// check arguments
++
+ 	if (argc < 2)
+ 	{
+ 		// print out help topic
+@@ -126,6 +128,10 @@ int wmain_lib(int argc, wchar_t *argv[])
+ 		NExtractTools::InputParams oInputParams;
+ 		if (oInputParams.FromXmlFile(sArg1) && (sArg2.empty() || oInputParams.FromXml(sArg2)))
+ 		{
++			logger.logInfo(std::string("FileTitle: ").append(logger.wstringToString(oInputParams.getTitle())));
++			long fileSize = std::lround(oInputParams.getFileSize()/1024);
++			logger.logInfo(std::string("FileSize: ").append(std::to_string(fileSize)).append("KB"));
++			
+ 			result = NExtractTools::fromInputParams(oInputParams);
+ 		}
+ 		else
+@@ -212,5 +218,8 @@ int wmain_lib(int argc, wchar_t *argv[])
+ 		}
+ 	}
+ 	//_CrtDumpMemoryLeaks();
+-	return getReturnErrorCode(result);
++
++	int nRetCode = getReturnErrorCode(result);
++	logger.logInfo(std::string("ReturnErrorCode: ").append(std::to_string(nRetCode)));
++	return nRetCode;
+ }
